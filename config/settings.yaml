@@ -1,0 +1,79 @@
+# ─────────────────────────────────────────────
+#  Global configuration — no hardcoded values
+#  in any other file. All paths are relative to
+#  the project root.
+# ─────────────────────────────────────────────
+
+paths:
+  data_raw: "data/raw"
+  data_processed: "data/processed"
+  results_figures: "results/figures"
+  results_tables: "results/tables"
+
+random_seed: 42
+
+# ── Dataset ──────────────────────────────────
+datasets:
+  directory: "class_imbalance/class_imbalance"
+  # Minimum imbalance ratio to keep a dataset (minority / majority)
+  min_imbalance_ratio: 0.01
+  # Maximum number of samples (skip very large datasets)
+  max_samples: 50000
+  target_column: "binaryClass"  # fallback: last column used if not found
+
+# ── Cross-validation ─────────────────────────
+# quick_run: true  →  fast results for checkpoint / development
+#            false →  full repeated k-fold for final submission
+quick_run: true
+
+evaluation:
+  cv_folds: 5          # full: 10
+  cv_strategy: "stratified"       # stratified | regular
+  n_repetitions: 1                # full: 5 — set quick_run: false for final submission
+  test_size: 0.2                  # only used when strategy == holdout
+  scoring:
+    - "f1"
+    - "roc_auc"
+    - "balanced_accuracy"
+    - "geometric_mean"            # custom metric in src/evaluation/metrics.py
+
+# ── KNN baseline ─────────────────────────────
+knn_base:
+  k_range: [1, 3, 5, 7, 9, 11, 15, 21]
+  distance_metric: "euclidean"    # euclidean | manhattan | minkowski
+  weights: "uniform"              # uniform | distance
+
+# ── KNN adaptive-k (entropy) ─────────────────
+knn_adaptive_entropy:
+  k_range: [1, 3, 5, 7, 9, 11, 15, 21]
+  entropy_smoothing: 1.0e-9
+  distance_metric: "euclidean"
+
+# ── KNN adaptive-k (eigenvalues) ─────────────
+knn_adaptive_eigen:
+  k_range: [1, 3, 5, 7, 9, 11, 15, 21]
+  n_components: null              # null → keep all; int → PCA dims
+  eigen_threshold: 0.95           # cumulative variance to retain
+  distance_metric: "euclidean"
+
+# ── DANN (baseline) ──────────────────────────
+dann:
+  sigma: 1.0                      # neighbourhood size σ
+  k_range: [1, 3, 5, 7, 9, 11, 15, 21]
+
+# ── DANN adaptive-k ──────────────────────────
+dann_adaptive:
+  sigma: 1.0
+  k_range: [1, 3, 5, 7, 9, 11, 15, 21]
+  adaptation_strategy: "entropy"  # entropy | eigen
+
+# ── SMOTE baseline ───────────────────────────
+smote:
+  k_neighbors: 5
+  sampling_strategy: "auto"
+
+# ── Statistical tests ────────────────────────
+statistical_tests:
+  alpha: 0.05
+  correction: "holm"              # holm | bonferroni | fdr_bh
+  test: "wilcoxon"                # wilcoxon | friedman
