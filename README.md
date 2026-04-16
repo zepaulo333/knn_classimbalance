@@ -6,6 +6,23 @@ We implement and benchmark KNN-based classifiers modified to handle class imbala
 
 ---
 
+## Algorithms
+
+| Class | File | Description |
+|---|---|---|
+| `KNNClassifier` | `knn_base.py` | Standard KNN baseline (from scratch) |
+| `KNNClassifierFast` | `knn_base.py` | Vectorised KNN via `scipy.cdist` — bit-for-bit identical, faster |
+| `KNNOptK` | `knn_base.py` | KNN with inner-CV k selection (balanced accuracy, √n range) |
+| `KNNAdaptiveEntropy` | `knn_adaptive_entropy.py` | Adaptive-k via local Shannon entropy |
+| `KNNAdaptiveEigen` | `knn_adaptive_eigen.py` | Adaptive-k via local eigenvalue structure |
+| `KNNAdaptiveTopo` | `knn_adaptive_topo.py` | Adaptive-k via persistent homology *(in development)* |
+| `DANN` | `dann.py` | Discriminant Adaptive NN — Hastie & Tibshirani (1996) |
+| `DANNAdaptive` | `dann_adaptive.py` | DANN + adaptive-k (proposed contribution) |
+
+**Benchmarks against:** SMOTE+KNN (imbalanced-learn).
+
+---
+
 ## Project structure
 
 ```
@@ -23,9 +40,10 @@ We implement and benchmark KNN-based classifiers modified to handle class imbala
 │   └── tables/                # Auto-generated CSV result tables
 ├── src/
 │   ├── algorithms/
-│   │   ├── knn_base.py            # Standard KNN from scratch
+│   │   ├── knn_base.py            # KNNClassifier, KNNClassifierFast, KNNOptK
 │   │   ├── knn_adaptive_entropy.py # Adaptive-k via local Shannon entropy
 │   │   ├── knn_adaptive_eigen.py   # Adaptive-k via local eigenvalue structure
+│   │   ├── knn_adaptive_topo.py    # Adaptive-k via persistent homology [WIP]
 │   │   ├── dann.py                # DANN baseline (Hastie & Tibshirani 1996)
 │   │   └── dann_adaptive.py       # DANN + adaptive-k (proposed contribution)
 │   ├── data/
