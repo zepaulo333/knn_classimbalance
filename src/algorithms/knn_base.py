@@ -16,6 +16,7 @@ from collections import Counter
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 from scipy.spatial.distance import cdist, euclidean
+from joblib import Parallel, delayed
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import StratifiedKFold
 
@@ -125,29 +126,29 @@ class KNNClassifierFast(KNNClassifier):
 class KNNOptK:
     """KNN with k selected by inner cross-validation — the proper baseline.
 
-    For each call to ``fit``, runs a stratified inner CV over ``k_range``
-    on the training data, scoring by balanced accuracy (appropriate for
-    imbalanced problems).  The best k is then used to fit a final
-    ``KNNClassifierFast`` on the full training set.
+    For each call to ``fit``, runs a stratified inner CV over a data-driven
+    range of odd k values from 1 to sqrt(n_train), scoring by balanced
+    accuracy (appropriate for imbalanced problems).  The best k is then used
+    to fit a final ``KNNClassifierFast`` on the full training set.
 
-    This is the industry-standard way to set k and should be used as the
-    comparison baseline instead of an arbitrary fixed k.
+    The k range is derived from the training data at fit time, so it scales
+    automatically with dataset size instead of relying on a hardcoded list.
 
     Parameters
     ----------
-    k_range : list[int]
-        Candidate values of k to search over.
+    k_max : int or None
+        Upper bound on k. ``None`` means use ``floor(sqrt(n_train))``.
     inner_cv_folds : int
         Number of folds for the inner CV used to select k.
     """
 
     def __init__(
         self,
-        k_range: list[int] | None = None,
+        k_max: int | None = None,
         inner_cv_folds: int | None = None,
     ) -> None:
         cfg = load_config()["knn_opt_k"]
-        self.k_range = k_range if k_range is not None else cfg["k_range"]
+        self.k_max = k_max if k_max is not None else cfg.get("k_max", None)
         self.inner_cv_folds = inner_cv_folds if inner_cv_folds is not None else cfg["inner_cv_folds"]
 
     def fit(self, X: ArrayLike, y: ArrayLike) -> "KNNOptK":
@@ -158,17 +159,38 @@ class KNNOptK:
         seed = load_config()["random_seed"]
         cv = StratifiedKFold(n_splits=self.inner_cv_folds, shuffle=True, random_state=seed)
 
-        k_scores: dict[int, list[float]] = {k: [] for k in self.k_range}
-        for tr, val in cv.split(X, y):
-            X_tr, X_val = X[tr], X[val]
-            y_tr, y_val = y[tr], y[val]
-            for k in self.k_range:
-                if k >= len(X_tr):
-                    continue
-                clf = KNNClassifierFast(k=k)
-                clf.fit(X_tr, y_tr)
-                pred = clf.predict(X_val)
-                k_scores[k].append(balanced_accuracy_score(y_val, pred))
+        # Derive k range from data: odd values 1..sqrt(n), capped at k_max
+        k_upper = self.k_max if self.k_max is not None else max(1, int(np.sqrt(len(X))))
+        k_range = [k for k in range(1, k_upper + 1, 2)]  # odd values only (avoids ties)
+        if not k_range:
+            k_range = [1]
+        self.k_range_ = k_range  # expose for inspection
+
+        def _eval_k(X_tr, X_val, y_tr, y_val, k):
+            if k >= len(X_tr):
+                return k, None
+            clf = KNNClassifierFast(k=k)
+            clf.fit(X_tr, y_tr)
+            return k, balanced_accuracy_score(y_val, clf.predict(X_val))
+
+        splits = [
+            (X[tr], X[val], y[tr], y[val])
+            for tr, val in cv.split(X, y)
+        ]
+        jobs = [
+            (X_tr, X_val, y_tr, y_val, k)
+            for X_tr, X_val, y_tr, y_val in splits
+            for k in k_range
+        ]
+        results = Parallel(n_jobs=8, prefer="threads")(
+            delayed(_eval_k)(X_tr, X_val, y_tr, y_val, k)
+            for X_tr, X_val, y_tr, y_val, k in jobs
+        )
+
+        k_scores: dict[int, list[float]] = {k: [] for k in k_range}
+        for k, score in results:
+            if score is not None:
+                k_scores[k].append(score)
 
         valid = {k: np.mean(v) for k, v in k_scores.items() if v}
         self.best_k_ = max(valid, key=valid.get)
