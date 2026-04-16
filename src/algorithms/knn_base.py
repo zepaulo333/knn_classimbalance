@@ -16,6 +16,10 @@ from collections import Counter
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 from scipy.spatial.distance import cdist, euclidean
+from sklearn.metrics import balanced_accuracy_score
+from sklearn.model_selection import StratifiedKFold
+
+from src.utils.config import load_config
 
 
 class KNNBase:
@@ -116,3 +120,65 @@ class KNNClassifierFast(KNNClassifier):
         counts = np.array([np.sum(neighbors == c) for c in self.classes_], dtype=float)
         total = counts.sum()
         return counts / total if total > 0 else counts
+
+
+class KNNOptK:
+    """KNN with k selected by inner cross-validation — the proper baseline.
+
+    For each call to ``fit``, runs a stratified inner CV over ``k_range``
+    on the training data, scoring by balanced accuracy (appropriate for
+    imbalanced problems).  The best k is then used to fit a final
+    ``KNNClassifierFast`` on the full training set.
+
+    This is the industry-standard way to set k and should be used as the
+    comparison baseline instead of an arbitrary fixed k.
+
+    Parameters
+    ----------
+    k_range : list[int]
+        Candidate values of k to search over.
+    inner_cv_folds : int
+        Number of folds for the inner CV used to select k.
+    """
+
+    def __init__(
+        self,
+        k_range: list[int] | None = None,
+        inner_cv_folds: int | None = None,
+    ) -> None:
+        cfg = load_config()["knn_opt_k"]
+        self.k_range = k_range if k_range is not None else cfg["k_range"]
+        self.inner_cv_folds = inner_cv_folds if inner_cv_folds is not None else cfg["inner_cv_folds"]
+
+    def fit(self, X: ArrayLike, y: ArrayLike) -> "KNNOptK":
+        X = np.asarray(X, dtype=float)
+        y = np.asarray(y)
+        self.classes_ = np.unique(y)
+
+        seed = load_config()["random_seed"]
+        cv = StratifiedKFold(n_splits=self.inner_cv_folds, shuffle=True, random_state=seed)
+
+        k_scores: dict[int, list[float]] = {k: [] for k in self.k_range}
+        for tr, val in cv.split(X, y):
+            X_tr, X_val = X[tr], X[val]
+            y_tr, y_val = y[tr], y[val]
+            for k in self.k_range:
+                if k >= len(X_tr):
+                    continue
+                clf = KNNClassifierFast(k=k)
+                clf.fit(X_tr, y_tr)
+                pred = clf.predict(X_val)
+                k_scores[k].append(balanced_accuracy_score(y_val, pred))
+
+        valid = {k: np.mean(v) for k, v in k_scores.items() if v}
+        self.best_k_ = max(valid, key=valid.get)
+
+        self._clf = KNNClassifierFast(k=self.best_k_)
+        self._clf.fit(X, y)
+        return self
+
+    def predict(self, X: ArrayLike) -> NDArray:
+        return self._clf.predict(X)
+
+    def predict_proba(self, X: ArrayLike) -> NDArray:
+        return self._clf.predict_proba(X)
