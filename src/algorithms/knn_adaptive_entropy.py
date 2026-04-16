@@ -1,28 +1,30 @@
 """KNN with adaptive-k selection driven by local class entropy.
 
-For each query point the neighbourhood size k is chosen from a candidate
-set so that the Shannon entropy of the class distribution among neighbours
-is maximised (most informative neighbourhood).  This biases the decision
-boundary toward the minority class in imbalanced settings.
+Extends KNNClassifier (adapted from rushter/MLAlgorithms) with adaptive-k:
+for each query point, k is chosen from a candidate set to maximise the
+Shannon entropy of the class distribution among neighbours — biasing the
+decision boundary toward the minority class in imbalanced settings.
 """
 
 from __future__ import annotations
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
+from scipy.spatial.distance import euclidean
 
+from src.algorithms.knn_base import KNNClassifier
 from src.utils.config import load_config
 
 
-class KNNAdaptiveEntropy:
+class KNNAdaptiveEntropy(KNNClassifier):
     """Adaptive-k KNN using local Shannon entropy as the selection criterion.
 
     Parameters
     ----------
     k_range : list[int]
         Candidate values of k to search over.
-    metric : str
-        Distance metric — ``"euclidean"`` or ``"manhattan"``.
+    distance_func : callable
+        Distance function. Defaults to Euclidean.
     smoothing : float
         Small constant added to probabilities before computing entropy.
     """
@@ -30,47 +32,41 @@ class KNNAdaptiveEntropy:
     def __init__(
         self,
         k_range: list[int] | None = None,
-        metric: str = "euclidean",
+        distance_func=euclidean,
         smoothing: float = 1e-9,
     ) -> None:
         cfg = load_config()["knn_adaptive_entropy"]
         self.k_range = k_range if k_range is not None else cfg["k_range"]
-        self.metric = metric
         self.smoothing = smoothing
+        super().__init__(k=max(self.k_range), distance_func=distance_func)
 
     # ------------------------------------------------------------------
-    # Fitting
+    # Overridden prediction — adaptive k replaces fixed k
     # ------------------------------------------------------------------
 
-    def fit(self, X: ArrayLike, y: ArrayLike) -> "KNNAdaptiveEntropy":
-        self._X_train = np.asarray(X, dtype=float)
-        self._y_train = np.asarray(y)
-        self.classes_ = np.unique(self._y_train)
-        return self
+    def _predict_x(self, x: NDArray):
+        order = self._argsort_distances(x)
+        sorted_labels = self.y[order]
+        k = self._best_k(sorted_labels)
+        return self.aggregate(sorted_labels[:k].tolist())
+
+    def _predict_proba_x(self, x: NDArray) -> NDArray:
+        order = self._argsort_distances(x)
+        sorted_labels = self.y[order]
+        k = self._best_k(sorted_labels)
+        neighbors = sorted_labels[:k]
+        counts = np.array([np.sum(neighbors == c) for c in self.classes_], dtype=float)
+        total = counts.sum()
+        return counts / total if total > 0 else counts
 
     # ------------------------------------------------------------------
-    # Prediction
+    # Helpers
     # ------------------------------------------------------------------
 
-    def predict(self, X: ArrayLike) -> NDArray:
-        X = np.asarray(X, dtype=float)
-        return np.array([self._predict_single(x) for x in X])
-
-    def predict_proba(self, X: ArrayLike) -> NDArray:
-        X = np.asarray(X, dtype=float)
-        return np.array([self._predict_proba_single(x) for x in X])
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
-    def _distances(self, x: NDArray) -> NDArray:
-        if self.metric == "euclidean":
-            diff = self._X_train - x
-            return np.sqrt((diff * diff).sum(axis=1))
-        if self.metric == "manhattan":
-            return np.abs(self._X_train - x).sum(axis=1)
-        raise ValueError(f"Unknown metric: {self.metric!r}")
+    def _argsort_distances(self, x: NDArray) -> NDArray:
+        """Vectorised Euclidean distances to all training points."""
+        diff = self.X - x
+        return np.argsort(np.sqrt((diff * diff).sum(axis=1)))
 
     def _entropy(self, labels: NDArray) -> float:
         if len(labels) == 0:
@@ -89,21 +85,3 @@ class KNNAdaptiveEntropy:
             if h > best_h:
                 best_h, best_k = h, k
         return best_k
-
-    def _predict_single(self, x: NDArray):
-        dists = self._distances(x)
-        order = np.argsort(dists)
-        sorted_labels = self._y_train[order]
-        k = self._best_k(sorted_labels)
-        neighbour_labels = sorted_labels[:k]
-        votes = {c: np.sum(neighbour_labels == c) for c in self.classes_}
-        return max(votes, key=votes.get)
-
-    def _predict_proba_single(self, x: NDArray) -> NDArray:
-        dists = self._distances(x)
-        order = np.argsort(dists)
-        sorted_labels = self._y_train[order]
-        k = self._best_k(sorted_labels)
-        neighbour_labels = sorted_labels[:k]
-        counts = np.array([np.sum(neighbour_labels == c) for c in self.classes_], dtype=float)
-        return counts / counts.sum()
