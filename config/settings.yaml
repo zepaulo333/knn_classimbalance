@@ -74,6 +74,12 @@ knn_adaptive_topo:
   h1_threshold: 0.1               # H1 total persistence / diameter above which boundary detected
   minority_threshold: 0.15        # label fraction below which neighbourhood is majority-dominated
 
+# ── KNN adaptive-k (dual class-anchor) ───────
+knn_adaptive_dual_anchor:
+  k_min: 1                        # k used when x fits minority structure
+  k_max: null                     # null → floor(sqrt(n_train)) at fit time
+  k_min_proba: 3                  # minimum k for predict_proba (avoids binary 0/1 output)
+
 # ── DANN (baseline) ──────────────────────────
 dann:
   sigma: 1.0                      # neighbourhood size σ
