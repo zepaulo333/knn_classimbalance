@@ -24,12 +24,12 @@ datasets:
 # ── Cross-validation ─────────────────────────
 # quick_run: true  →  fast results for checkpoint / development
 #            false →  full repeated k-fold for final submission
-quick_run: true
+quick_run: false
 
 evaluation:
-  cv_folds: 5          # full: 10
+  cv_folds: 10         # full: 10
   cv_strategy: "stratified"       # stratified | regular
-  n_repetitions: 1                # full: 5 — set quick_run: false for final submission
+  n_repetitions: 5                # full: 5
   test_size: 0.2                  # only used when strategy == holdout
   scoring:
     - "f1"
