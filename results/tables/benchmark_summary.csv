@@ -1,0 +1,7 @@
+algorithm,f1,balanced_accuracy,geometric_mean,roc_auc
+KNNAdaptiveTopo,0.5278,0.7381,0.6347,0.7428
+SMOTE+KNN,0.5245,0.7816,0.748,0.8213
+KNNOptK,0.5234,0.7386,0.6107,0.7662
+KNNBaseline,0.4945,0.7204,0.5597,0.8017
+KNNAdaptiveEntropy,0.4096,0.6783,0.4676,0.8285
+KNNAdaptiveEigen,0.3602,0.6612,0.3924,0.8326

@@ -1,0 +1,7 @@
+algorithm,avg_rank
+KNNAdaptiveTopo,2.391
+KNNOptK,2.62
+SMOTE+KNN,3.022
+KNNBaseline,3.283
+KNNAdaptiveEntropy,4.533
+KNNAdaptiveEigen,5.152

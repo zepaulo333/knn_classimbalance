@@ -16,7 +16,7 @@ random_seed: 42
 datasets:
   directory: "class_imbalance/class_imbalance"
   # Minimum imbalance ratio to keep a dataset (minority / majority)
-  min_imbalance_ratio: 0.01
+  min_imbalance_ratio: 0.0
   # Maximum number of samples (skip very large datasets)
   max_samples: 50000
   target_column: "binaryClass"  # fallback: last column used if not found
@@ -47,21 +47,32 @@ knn_opt_k:
   # k_max caps the search for large datasets (null = use sqrt(n_train), no cap)
   k_max: null
   inner_cv_folds: 3   # kept at 3 to limit overhead inside the outer CV loop
+  n_jobs: 8           # inner CV parallelism; reduce when outer benchmark N_JOBS > 1
   distance_metric: "euclidean"    # euclidean | manhattan | minkowski
   weights: "uniform"              # uniform | distance
 
 # ── KNN adaptive-k (entropy) ─────────────────
 knn_adaptive_entropy:
-  k_range: [1, 3, 5, 7, 9, 11, 15, 21]
+  k_min: 1                        # smallest k (must be odd; floored to odd if even)
+  k_max: null                     # null → use floor(sqrt(n_train)) at fit time
   entropy_smoothing: 1.0e-9
   distance_metric: "euclidean"
 
 # ── KNN adaptive-k (eigenvalues) ─────────────
 knn_adaptive_eigen:
-  k_range: [1, 3, 5, 7, 9, 11, 15, 21]
+  k_min: 1                        # smallest k (must be odd; floored to odd if even)
+  k_max: null                     # null → use floor(sqrt(n_train)) at fit time
   n_components: null              # null → keep all; int → PCA dims
   eigen_threshold: 0.95           # cumulative variance to retain
   distance_metric: "euclidean"
+
+# ── KNN adaptive-k (topology / persistent homology) ──
+knn_adaptive_topo:
+  k_min: 1                        # k used in minority/boundary/outlier cases
+  k_max: null                     # null → floor(sqrt(n_train)) at fit time
+  h0_threshold: 0.5               # H0 max persistence / diameter above which sub-clusters detected
+  h1_threshold: 0.1               # H1 total persistence / diameter above which boundary detected
+  minority_threshold: 0.15        # label fraction below which neighbourhood is majority-dominated
 
 # ── DANN (baseline) ──────────────────────────
 dann:
@@ -71,7 +82,8 @@ dann:
 # ── DANN adaptive-k ──────────────────────────
 dann_adaptive:
   sigma: 1.0
-  k_range: [1, 3, 5, 7, 9, 11, 15, 21]
+  k_min: 1                        # smallest k (floored to odd if even)
+  k_max: null                     # null → use floor(sqrt(n_train)) at fit time
   adaptation_strategy: "entropy"  # entropy | eigen
 
 # ── SMOTE baseline ───────────────────────────

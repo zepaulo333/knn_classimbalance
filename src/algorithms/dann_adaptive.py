@@ -14,13 +14,24 @@ from src.algorithms.dann import DANN
 from src.utils.config import load_config
 
 
+def _to_odd_floor(n: int) -> int:
+    """Largest odd integer <= n (minimum 1)."""
+    return max(1, n if n % 2 == 1 else n - 1)
+
+
 class DANNAdaptive(DANN):
     """DANN classifier with adaptive neighbourhood size.
 
+    k is selected per query point by a halve/double hill-climb starting at
+    floor(sqrt(n_train)), always keeping k odd.  O(log n_train) criterion
+    evaluations per prediction instead of scanning a fixed candidate list.
+
     Parameters
     ----------
-    k_range : list[int]
-        Candidate values of k to search over.
+    k_min : int
+        Smallest k to consider (floored to nearest odd if even).
+    k_max : int or None
+        Largest k to consider.  ``None`` (default) uses floor(sqrt(n_train)).
     sigma : float
         Regularisation parameter for DANN local metric.
     adaptation_strategy : str
@@ -29,16 +40,27 @@ class DANNAdaptive(DANN):
 
     def __init__(
         self,
-        k_range: list[int] | None = None,
+        k_min: int | None = None,
+        k_max: int | None = None,
         sigma: float = 1.0,
         adaptation_strategy: str = "entropy",
+        n_jobs: int = 1,
     ) -> None:
         cfg = load_config()["dann_adaptive"]
-        self.k_range = k_range if k_range is not None else cfg["k_range"]
+        self._k_min = _to_odd_floor(k_min if k_min is not None else cfg.get("k_min", 1))
+        self._k_max_cfg = k_max if k_max is not None else cfg.get("k_max", None)
         self.adaptation_strategy = adaptation_strategy
-        # Initialise DANN with k=max so _local_metric works correctly;
-        # actual k used during prediction is chosen adaptively per point.
-        super().__init__(k=max(self.k_range), sigma=sigma)
+        self._n_train: int = 0
+        super().__init__(k=1, sigma=sigma, n_jobs=n_jobs)
+
+    # ------------------------------------------------------------------
+    # fit — capture training size so k_max can default to sqrt(n_train)
+    # ------------------------------------------------------------------
+
+    def fit(self, X: ArrayLike, y: ArrayLike) -> "DANNAdaptive":
+        super().fit(X, y)
+        self._n_train = len(self._X_train)
+        return self
 
     # ------------------------------------------------------------------
     # k selection strategies
@@ -66,17 +88,48 @@ class DANNAdaptive(DANN):
         cumvar = np.cumsum(eigvals) / total
         return float(np.searchsorted(cumvar, threshold)) + 1.0
 
+    def _score(self, sorted_labels: NDArray, sorted_X: NDArray, k: int) -> float:
+        if self.adaptation_strategy == "entropy":
+            return self._entropy(sorted_labels[:k])
+        return self._effective_dim(sorted_X[:k])
+
     def _best_k(self, sorted_labels: NDArray, sorted_X: NDArray) -> int:
-        best_k, best_score = self.k_range[0], -np.inf
-        for k in self.k_range:
-            if k > len(sorted_labels):
+        n_avail = len(sorted_labels)
+        k_max_eff = self._k_max_cfg if self._k_max_cfg is not None else max(1, int(np.sqrt(self._n_train)))
+        k_max_eff = min(_to_odd_floor(k_max_eff), n_avail)
+        k_max_eff = max(self._k_min, k_max_eff)
+
+        # Starting point: sqrt(n_train), odd, clipped to [k_min, k_max]
+        k_start = _to_odd_floor(max(1, int(np.sqrt(self._n_train))))
+        k = max(self._k_min, min(k_max_eff, k_start))
+
+        best_k = k
+        best_score = self._score(sorted_labels, sorted_X, k)
+
+        # Halve downward from k_start while improving
+        curr = k
+        while curr > self._k_min:
+            nxt = max(self._k_min, _to_odd_floor(curr // 2))
+            if nxt >= curr:
                 break
-            if self.adaptation_strategy == "entropy":
-                score = self._entropy(sorted_labels[:k])
-            else:
-                score = self._effective_dim(sorted_X[:k])
+            score = self._score(sorted_labels, sorted_X, nxt)
             if score > best_score:
-                best_score, best_k = score, k
+                best_score, best_k, curr = score, nxt, nxt
+            else:
+                break
+
+        # Double upward from k_start while improving
+        curr = k
+        while curr < k_max_eff:
+            nxt = min(k_max_eff, _to_odd_floor(curr * 2))
+            if nxt <= curr:
+                break
+            score = self._score(sorted_labels, sorted_X, nxt)
+            if score > best_score:
+                best_score, best_k, curr = score, nxt, nxt
+            else:
+                break
+
         return best_k
 
     # ------------------------------------------------------------------

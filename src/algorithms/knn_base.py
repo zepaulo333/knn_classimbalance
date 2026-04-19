@@ -37,9 +37,10 @@ class KNNBase:
         ``scipy.spatial.distance`` will do. Defaults to Euclidean.
     """
 
-    def __init__(self, k: int = 5, distance_func=euclidean) -> None:
+    def __init__(self, k: int = 5, distance_func=euclidean, n_jobs: int = 1) -> None:
         self.k = None if k == 0 else k
         self.distance_func = distance_func
+        self.n_jobs = n_jobs
 
     def fit(self, X: ArrayLike, y: ArrayLike) -> "KNNBase":
         self.X = np.asarray(X, dtype=float)
@@ -52,11 +53,23 @@ class KNNBase:
 
     def predict(self, X: ArrayLike) -> NDArray:
         X = np.asarray(X, dtype=float)
-        return np.array([self._predict_x(x) for x in X])
+        if self.n_jobs == 1:
+            return np.array([self._predict_x(x) for x in X])
+        return np.array(
+            Parallel(n_jobs=self.n_jobs, prefer="threads")(
+                delayed(self._predict_x)(x) for x in X
+            )
+        )
 
     def predict_proba(self, X: ArrayLike) -> NDArray:
         X = np.asarray(X, dtype=float)
-        return np.array([self._predict_proba_x(x) for x in X])
+        if self.n_jobs == 1:
+            return np.array([self._predict_proba_x(x) for x in X])
+        return np.array(
+            Parallel(n_jobs=self.n_jobs, prefer="threads")(
+                delayed(self._predict_proba_x)(x) for x in X
+            )
+        )
 
     def _predict_x(self, x: NDArray):
         """Predict the label of a single instance.
@@ -146,10 +159,12 @@ class KNNOptK:
         self,
         k_max: int | None = None,
         inner_cv_folds: int | None = None,
+        n_jobs: int | None = None,
     ) -> None:
         cfg = load_config()["knn_opt_k"]
         self.k_max = k_max if k_max is not None else cfg.get("k_max", None)
         self.inner_cv_folds = inner_cv_folds if inner_cv_folds is not None else cfg["inner_cv_folds"]
+        self.n_jobs = n_jobs if n_jobs is not None else cfg.get("n_jobs", 8)
 
     def fit(self, X: ArrayLike, y: ArrayLike) -> "KNNOptK":
         X = np.asarray(X, dtype=float)
@@ -182,7 +197,7 @@ class KNNOptK:
             for X_tr, X_val, y_tr, y_val in splits
             for k in k_range
         ]
-        results = Parallel(n_jobs=8, prefer="threads")(
+        results = Parallel(n_jobs=self.n_jobs, prefer="threads")(
             delayed(_eval_k)(X_tr, X_val, y_tr, y_val, k)
             for X_tr, X_val, y_tr, y_val, k in jobs
         )

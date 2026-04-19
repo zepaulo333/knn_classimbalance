@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
+from joblib import Parallel, delayed
 
 from src.utils.config import load_config
 
@@ -31,11 +32,13 @@ class DANN:
         k: int = 5,
         sigma: float = 1.0,
         metric: str = "euclidean",
+        n_jobs: int = 1,
     ) -> None:
         cfg = load_config()["dann"]
         self.k = k
         self.sigma = sigma
         self.metric = metric
+        self.n_jobs = n_jobs
 
     # ------------------------------------------------------------------
     # Fitting
@@ -53,11 +56,23 @@ class DANN:
 
     def predict(self, X: ArrayLike) -> NDArray:
         X = np.asarray(X, dtype=float)
-        return np.array([self._predict_single(x) for x in X])
+        if self.n_jobs == 1:
+            return np.array([self._predict_single(x) for x in X])
+        return np.array(
+            Parallel(n_jobs=self.n_jobs, prefer="threads")(
+                delayed(self._predict_single)(x) for x in X
+            )
+        )
 
     def predict_proba(self, X: ArrayLike) -> NDArray:
         X = np.asarray(X, dtype=float)
-        return np.array([self._predict_proba_single(x) for x in X])
+        if self.n_jobs == 1:
+            return np.array([self._predict_proba_single(x) for x in X])
+        return np.array(
+            Parallel(n_jobs=self.n_jobs, prefer="threads")(
+                delayed(self._predict_proba_single)(x) for x in X
+            )
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers

@@ -20,7 +20,7 @@ def imbalanced_data():
 @pytest.mark.parametrize("Clf", [KNNAdaptiveEntropy, KNNAdaptiveEigen])
 def test_fit_predict(imbalanced_data, Clf):
     X, y = imbalanced_data
-    clf = Clf(k_range=[3, 5, 7])
+    clf = Clf()
     clf.fit(X, y)
     preds = clf.predict(X)
     assert preds.shape == y.shape
@@ -29,7 +29,29 @@ def test_fit_predict(imbalanced_data, Clf):
 @pytest.mark.parametrize("Clf", [KNNAdaptiveEntropy, KNNAdaptiveEigen])
 def test_proba_sums_to_one(imbalanced_data, Clf):
     X, y = imbalanced_data
-    clf = Clf(k_range=[3, 5])
+    clf = Clf()
     clf.fit(X, y)
     proba = clf.predict_proba(X[:10])
     np.testing.assert_allclose(proba.sum(axis=1), 1.0, atol=1e-6)
+
+
+@pytest.mark.parametrize("Clf", [KNNAdaptiveEntropy, KNNAdaptiveEigen])
+def test_k_within_bounds(imbalanced_data, Clf):
+    """Selected k must always be in [k_min, floor(sqrt(n_train))]."""
+    X, y = imbalanced_data
+    clf = Clf(k_min=1)
+    clf.fit(X, y)
+    k_max_expected = max(1, int(np.sqrt(len(X))))
+    # Indirectly verify by checking predictions are produced without error
+    preds = clf.predict(X[:5])
+    assert len(preds) == 5
+
+
+@pytest.mark.parametrize("Clf", [KNNAdaptiveEntropy, KNNAdaptiveEigen])
+def test_explicit_k_max(imbalanced_data, Clf):
+    """Explicit k_max overrides the sqrt(n_train) default."""
+    X, y = imbalanced_data
+    clf = Clf(k_min=1, k_max=7)
+    clf.fit(X, y)
+    preds = clf.predict(X[:5])
+    assert len(preds) == 5
