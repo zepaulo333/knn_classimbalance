@@ -16,6 +16,7 @@ dependencies:
   - pip
   - pip:
     - imbalanced-learn
+    - ripser
     - black
     - ruff
     - pytest

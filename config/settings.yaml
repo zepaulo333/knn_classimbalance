@@ -29,7 +29,7 @@ quick_run: false
 evaluation:
   cv_folds: 10         # full: 10
   cv_strategy: "stratified"       # stratified | regular
-  n_repetitions: 5                # full: 5
+  n_repetitions: 1                # full: 5
   test_size: 0.2                  # only used when strategy == holdout
   scoring:
     - "f1"
