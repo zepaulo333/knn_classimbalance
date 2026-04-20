@@ -17,6 +17,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import OneHotEncoder
 
 from src.utils.config import get_project_root, load_config
 
@@ -45,8 +46,12 @@ def load_all_datasets() -> list[Dataset]:
     min_ratio = cfg["datasets"]["min_imbalance_ratio"]
     max_samples = cfg["datasets"]["max_samples"]
 
+    exclude = set(cfg["datasets"].get("exclude", []))
+
     datasets = []
     for csv_path in sorted(data_dir.glob("*.csv")):
+        if csv_path.stem in exclude:
+            continue
         ds = _load_single(csv_path, preferred_col, min_ratio, max_samples)
         if ds is not None:
             datasets.append(ds)
@@ -97,17 +102,26 @@ def _load_single(
     if len(np.unique(y_raw)) != 2:
         return None
 
-    # Feature matrix — numeric columns only, excluding target
-    X = df.drop(columns=[target_col]).select_dtypes(include=[np.number]).values
+    features_df = df.drop(columns=[target_col])
+    num_df = features_df.select_dtypes(include=[np.number])
+    cat_df = features_df.select_dtypes(exclude=[np.number])
 
-    if X.shape[1] == 0:
+    parts = []
+    if num_df.shape[1] > 0:
+        X_num = num_df.values.astype(float)
+        if np.isnan(X_num).any():
+            col_medians = np.nanmedian(X_num, axis=0)
+            nan_mask = np.isnan(X_num)
+            X_num[nan_mask] = np.take(col_medians, np.where(nan_mask)[1])
+        parts.append(X_num)
+    if cat_df.shape[1] > 0:
+        enc = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
+        parts.append(enc.fit_transform(cat_df.values))
+
+    if not parts:
         return None
 
-    # Impute missing values with column medians
-    if np.isnan(X).any():
-        col_medians = np.nanmedian(X, axis=0)
-        nan_mask = np.isnan(X)
-        X[nan_mask] = np.take(col_medians, np.where(nan_mask)[1])
+    X = np.hstack(parts) if len(parts) > 1 else parts[0]
 
     # Compute imbalance ratio
     classes, counts = np.unique(pd.factorize(y_raw)[0], return_counts=True)

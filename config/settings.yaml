@@ -19,6 +19,9 @@ datasets:
   min_imbalance_ratio: 0.0
   # Maximum number of samples (skip very large datasets)
   max_samples: 50000
+  # Datasets to skip entirely (e.g. too many features → prohibitive runtime)
+  exclude:
+    - dataset_1039_hiva_agnostic
   target_column: "binaryClass"  # fallback: last column used if not found
 
 # ── Cross-validation ─────────────────────────
