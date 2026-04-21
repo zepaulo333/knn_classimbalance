@@ -83,6 +83,13 @@ knn_adaptive_dual_anchor:
   k_max: null                     # null → floor(sqrt(n_train)) at fit time
   k_min_proba: 3                  # minimum k for predict_proba (avoids binary 0/1 output)
 
+# ── KNN fair-rank (order-statistics correction) ──
+knn_fair_rank:
+  k_min: 10                       # nearest minority neighbours fetched (for rank-1 min + LID)
+  k_maj_buffer: 10                # added to ceil(r) when sizing majority neighbourhood
+  k_maj_floor: 30                 # lower bound on majority neighbourhood (for small r)
+  k_maj_cap: 100                  # upper bound on majority neighbourhood (for huge r)
+
 # ── DANN (baseline) ──────────────────────────
 dann:
   sigma: 1.0                      # neighbourhood size σ
