@@ -134,11 +134,43 @@ def _append_chunk(df_chunk: pd.DataFrame, output_path: Path) -> None:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+def _backup_csv(output_path: Path) -> Path | None:
+    """Copy output_path to a timestamped .bak file; return the backup path."""
+    import shutil
+    from datetime import datetime
+
+    if not output_path.exists() or output_path.stat().st_size == 0:
+        return None
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = output_path.with_name(f"{output_path.stem}_backup_{ts}{output_path.suffix}")
+    shutil.copy2(output_path, backup_path)
+    print(f"  Backup saved to {backup_path.name}")
+    return backup_path
+
+
+def _drop_algorithm(output_path: Path, algorithm_name: str) -> Path | None:
+    """Backup the CSV, then remove all rows for `algorithm_name` in-place.
+
+    Returns the backup path (or None if no backup was made).
+    """
+    backup_path = _backup_csv(output_path)
+    existing = _load_existing(output_path)
+    if existing is None:
+        return backup_path
+    filtered = existing[existing["algorithm"] != algorithm_name]
+    filtered.to_csv(output_path, index=False)
+    n_dropped = len(existing) - len(filtered)
+    if n_dropped:
+        print(f"  Dropped {n_dropped} existing rows for '{algorithm_name}'.")
+    return backup_path
+
+
 def run_benchmark(
     estimators: dict,
     datasets: list[Dataset],
     output_path: Path | None = None,
     n_jobs: int = 1,
+    replace_algorithm: str | None = None,
 ) -> pd.DataFrame:
     """Run benchmark with incremental saving and (dataset, algorithm) resume.
 
@@ -154,7 +186,14 @@ def run_benchmark(
         Outer dataset-level parallelism.  Use 1 (safe) or 4 (faster).
         Note: KNNOptK uses 8 threads internally; set n_jobs=1 when running
         it to avoid oversubscription.
+    replace_algorithm : str or None
+        If given, drop all existing rows for this algorithm name from
+        output_path before running, forcing a full re-run of that algorithm
+        only.  All other algorithms are left untouched.
     """
+    if replace_algorithm is not None and output_path is not None:
+        _drop_algorithm(output_path, replace_algorithm)
+
     cfg = load_config()["evaluation"]
     n_folds = cfg["cv_folds"] * cfg["n_repetitions"]
     cv = RepeatedStratifiedKFold(
