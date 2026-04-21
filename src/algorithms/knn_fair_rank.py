@@ -5,26 +5,32 @@ rank-1 neighbour than the minority class as a pure sampling artifact:
 with N_maj >> N_min, more samples means smaller minimum-distance
 statistics even when the underlying distributions are equivalent.
 
-This algorithm corrects that bias by comparing rank-1 minority distance
-against rank-k_eff majority distance, where k_eff is derived from order
-statistics of Poisson-process nearest-neighbour distances:
+This algorithm corrects that bias by running multiple rank-corrected
+comparisons and taking a majority vote. The rank correction is derived
+from order statistics of Poisson-process nearest-neighbour distances:
 
     E[d_k^c] ∝ (k / N_c)^(1/d)
 
-Setting E[d_{k_eff}^maj] = E[d_1^min] gives the fair rank
+Setting E[d_{k_eff}^maj] = E[d_1^min] and raising both sides to the
+power d cancels the dimension, giving the dimension-free fair rank
 
-    k_eff = r^(1/d)   with   r = N_maj / N_min
+    k_eff = r   with   r = N_maj / N_min
 
-where d is the local intrinsic dimensionality at the query point,
-estimated via the Levina-Bickel MLE:
+More generally, rank i on the minority side is statistically equivalent
+to rank i * k_eff on the majority side. We therefore run n_votes such
+comparisons and vote:
 
-    d_local = [ (1/(K-1)) * Σ log(d_K / d_i) ]^(-1)
+    for i in 1..n_votes:
+        vote minority if d_i^min < d_{i * k_eff}^maj
+
+Dimensionality still influences the numerical effect: the ratio
+E[d_r^maj] / E[d_1^maj] ≈ r^(1/d) tells us how much the correction
+shifts the majority reference. In high dimensions this ratio goes to 1
+(concentration of measure), so the correction is self-damping through
+the distance values without any need to shrink k_eff.
 
 Two per-class neighbour lists are used so both classes are always
 represented, regardless of how imbalanced the dataset is.
-
-No resampling, no vote reweighting, no hyperparameters beyond the
-neighbourhood sizes — r and d are both read off the data.
 """
 
 from __future__ import annotations
@@ -43,8 +49,9 @@ class KNNFairRank(KNNClassifier):
     Parameters
     ----------
     k_min : int
-        Number of nearest minority neighbours to fetch. Used for LID and
-        to provide the rank-1 minority distance.
+        Number of nearest minority neighbours to fetch. Used for LID
+        estimation and as the upper bound on the number of rank-corrected
+        vote comparisons.
     k_maj_buffer : int
         Additive buffer added to ceil(r) when sizing the majority
         neighbourhood; k_maj = max(ceil(r) + buffer, k_maj_floor).
@@ -54,6 +61,10 @@ class KNNFairRank(KNNClassifier):
     k_maj_cap : int or None
         Upper bound on the majority neighbourhood size for very
         imbalanced datasets. None = no cap.
+    n_votes : int
+        Maximum number of rank-corrected comparisons to aggregate into
+        the final vote. Actual number used per query is clipped by
+        available neighbours.
     """
 
     def __init__(
@@ -62,13 +73,15 @@ class KNNFairRank(KNNClassifier):
         k_maj_buffer: int | None = None,
         k_maj_floor: int | None = None,
         k_maj_cap: int | None = None,
+        n_votes: int | None = None,
         n_jobs: int = 1,
     ) -> None:
         cfg = load_config().get("knn_fair_rank", {})
         self._k_min = k_min if k_min is not None else cfg.get("k_min", 10)
         self._k_maj_buffer = k_maj_buffer if k_maj_buffer is not None else cfg.get("k_maj_buffer", 10)
         self._k_maj_floor = k_maj_floor if k_maj_floor is not None else cfg.get("k_maj_floor", 30)
-        self._k_maj_cap = k_maj_cap if k_maj_cap is not None else cfg.get("k_maj_cap", 100)
+        self._k_maj_cap = k_maj_cap if k_maj_cap is not None else cfg.get("k_maj_cap", 1000)
+        self._n_votes = n_votes if n_votes is not None else cfg.get("n_votes", 5)
         self._minority_class = None
         self._majority_class = None
         self._X_min: NDArray | None = None
@@ -89,7 +102,11 @@ class KNNFairRank(KNNClassifier):
         self._X_min = self.X[self.y == self._minority_class]
         self._X_maj = self.X[self.y == self._majority_class]
 
-        k_maj = max(int(np.ceil(self._r)) + self._k_maj_buffer, self._k_maj_floor)
+        # Majority neighbourhood must cover n_votes * k_eff in the worst case.
+        # For the LID-damped variant, k_eff ≤ r, so worst case is n_votes * r.
+        # We size k_maj generously but cap it to avoid blowing up on extreme r.
+        k_maj = max(int(np.ceil(self._r)) * self._n_votes + self._k_maj_buffer,
+                    self._k_maj_floor)
         if self._k_maj_cap is not None:
             k_maj = min(k_maj, self._k_maj_cap)
         self._k_maj_eff = min(k_maj, len(self._X_maj))
@@ -121,7 +138,6 @@ class KNNFairRank(KNNClassifier):
         """Levina-Bickel MLE of local intrinsic dimensionality."""
         if len(distances) < 2:
             return 1.0
-        # Guard against zero distances (duplicate training points)
         d = distances[distances > 0]
         if len(d) < 2:
             return 1.0
@@ -129,8 +145,42 @@ class KNNFairRank(KNNClassifier):
         log_ratios = np.log(d_k / d[:-1])
         mean_log = np.mean(log_ratios)
         if mean_log <= 0 or not np.isfinite(mean_log):
-            return float(len(d))  # fall back to ambient-like
+            return float(len(d))
         return float(1.0 / mean_log)
+
+    def _vote_fraction(self, x: NDArray) -> tuple[float, int]:
+        """Run the rank-corrected vote. Returns (fraction_minority, n_votes).
+
+        For i in 1..n_votes_eff, compares d_i^min to d_{i*k_eff}^maj and
+        counts the fraction of comparisons where minority is closer.
+        k_eff is the global imbalance ratio r (see module docstring).
+        """
+        d_min, d_maj = self._per_class_distances(x)
+        if len(d_min) == 0 or len(d_maj) == 0:
+            return (1.0 if len(d_min) > 0 else 0.0, 0)
+
+        # Dimension-free fair rank: k_eff = r.
+        k_eff = int(max(1, round(self._r)))
+
+        # Number of votes we can actually support:
+        # - limited by minority samples (|d_min|)
+        # - limited by the largest majority rank we can reach (|d_maj| // k_eff)
+        # - user-specified cap (n_votes)
+        max_votes_maj = len(d_maj) // k_eff
+        n_votes = min(self._n_votes, len(d_min), max_votes_maj)
+        if n_votes < 1:
+            # Fallback: at least one comparison using what we have
+            n_votes = 1
+            k_eff = min(k_eff, len(d_maj))
+
+        # Vectorised comparison
+        min_refs = d_min[:n_votes]                                # d_1..d_n_votes
+        maj_indices = np.arange(1, n_votes + 1) * k_eff - 1       # 0-based
+        maj_indices = np.clip(maj_indices, 0, len(d_maj) - 1)
+        maj_refs = d_maj[maj_indices]                             # d_{k_eff}..d_{n_votes*k_eff}
+
+        votes_minority = int(np.sum(min_refs < maj_refs))
+        return votes_minority / n_votes, n_votes
 
     def _decide(self, x: NDArray) -> int:
         if len(self._X_min) == 0:
@@ -138,62 +188,37 @@ class KNNFairRank(KNNClassifier):
         if len(self._X_maj) == 0:
             return self._minority_class
 
-        d_min, d_maj = self._per_class_distances(x)
-
-        if len(d_min) == 0:
+        frac_min, n_votes = self._vote_fraction(x)
+        if n_votes == 0:
             return self._majority_class
-        if len(d_maj) == 0:
-            return self._minority_class
-
-        merged = np.sort(np.concatenate([d_min, d_maj]))
-        d_local = self._estimate_lid(merged)
-        d_local = max(d_local, 1.0)
-
-        k_eff_float = self._r ** (1.0 / d_local)
-        k_eff = int(max(1, round(k_eff_float)))
-        k_eff = min(k_eff, len(d_maj))
-
-        d_min_ref = d_min[0]
-        d_maj_ref = d_maj[k_eff - 1]
-
-        if d_min_ref < d_maj_ref:
-            return self._minority_class
-        return self._majority_class
+        # Tie goes to majority (conservative; preserves precision).
+        return self._minority_class if frac_min > 0.5 else self._majority_class
 
     def _predict_x(self, x: NDArray):
         return self._decide(x)
 
     def _predict_proba_x(self, x: NDArray) -> NDArray:
-        """Soft score derived from the d_min / (d_min + d_maj) ratio.
+        """Soft score = fraction of rank-corrected votes favouring minority.
 
-        Uses the same k_eff rank correction as the hard decision, so
-        the two are consistent. A lower ratio means minority is closer
-        in the fair-rank sense, so p(minority) is higher.
+        This is naturally consistent with the hard decision: the hard
+        rule predicts minority iff this fraction > 0.5.
         """
-        if len(self._X_min) == 0 or len(self._X_maj) == 0:
-            prob = np.zeros(len(self.classes_), dtype=float)
-            present = self._majority_class if len(self._X_min) == 0 else self._minority_class
-            prob[np.where(self.classes_ == present)[0][0]] = 1.0
-            return prob
-
-        d_min, d_maj = self._per_class_distances(x)
-        merged = np.sort(np.concatenate([d_min, d_maj]))
-        d_local = max(self._estimate_lid(merged), 1.0)
-        k_eff = int(max(1, round(self._r ** (1.0 / d_local))))
-        k_eff = min(k_eff, len(d_maj))
-
-        d_min_ref = d_min[0]
-        d_maj_ref = d_maj[k_eff - 1]
-        total = d_min_ref + d_maj_ref
-        if total <= 0:
-            p_min = 0.5
-        else:
-            # Closer minority → smaller d_min_ref → larger p_min
-            p_min = d_maj_ref / total
-
         prob = np.zeros(len(self.classes_), dtype=float)
         idx_min = int(np.where(self.classes_ == self._minority_class)[0][0])
         idx_maj = int(np.where(self.classes_ == self._majority_class)[0][0])
-        prob[idx_min] = p_min
-        prob[idx_maj] = 1.0 - p_min
+
+        if len(self._X_min) == 0:
+            prob[idx_maj] = 1.0
+            return prob
+        if len(self._X_maj) == 0:
+            prob[idx_min] = 1.0
+            return prob
+
+        frac_min, n_votes = self._vote_fraction(x)
+        if n_votes == 0:
+            prob[idx_maj] = 1.0
+            return prob
+
+        prob[idx_min] = frac_min
+        prob[idx_maj] = 1.0 - frac_min
         return prob

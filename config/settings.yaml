@@ -85,10 +85,11 @@ knn_adaptive_dual_anchor:
 
 # ── KNN fair-rank (order-statistics correction) ──
 knn_fair_rank:
-  k_min: 10                       # nearest minority neighbours fetched (for rank-1 min + LID)
-  k_maj_buffer: 10                # added to ceil(r) when sizing majority neighbourhood
+  k_min: 10                       # nearest minority neighbours fetched (for upper bound on votes)
+  k_maj_buffer: 10                # added when sizing majority neighbourhood
   k_maj_floor: 30                 # lower bound on majority neighbourhood (for small r)
-  k_maj_cap: 100                  # upper bound on majority neighbourhood (for huge r)
+  k_maj_cap: 1000                 # upper bound (raised so n_votes*r is reachable at severe imbalance)
+  n_votes: 5                      # rank-corrected comparisons aggregated into each prediction
 
 # ── DANN (baseline) ──────────────────────────
 dann:

@@ -1,0 +1,11 @@
+algorithm,avg_rank
+SMOTE+KNN,2.538
+KNNFairRank,2.888
+KNNAdaptiveTopo,3.512
+KNNOptK,4.2
+KNNBaseline,4.975
+KNNAdaptiveDualAnchor,6.1
+KNNAdaptiveEntropy,6.875
+DANN,7.7
+DANNAdaptive_entropy,8.025
+KNNAdaptiveEigen,8.188
