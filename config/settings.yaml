@@ -91,6 +91,12 @@ knn_fair_rank:
   k_maj_cap: 1000                 # upper bound (raised so n_votes*r is reachable at severe imbalance)
   n_votes: 5                      # rank-corrected comparisons aggregated into each prediction
 
+# ── KNN fair-rank CV (calibrated exponent k_eff = round(r^α)) ──
+knn_fair_rank_cv:
+  alpha_grid: [0.25, 0.5, 0.75, 1.0]   # α candidates; inner CV selects one per dataset
+  inner_cv_folds: 3                    # folds used to choose α (matches knn_opt_k style)
+  scoring: "geometric_mean"            # G-mean | balanced_accuracy | f1
+
 # ── DANN (baseline) ──────────────────────────
 dann:
   sigma: 1.0                      # neighbourhood size σ
