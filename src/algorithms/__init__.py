@@ -8,6 +8,7 @@ from .knn_fair_rank_b import KNNFairRankMagnitude
 from .knn_fair_rank_c import KNNFairRankCV
 from .dann import DANN
 from .dann_adaptive import DANNAdaptive
+from .knn_weighted import KNNWeighted
 
 __all__ = [
     "KNNClassifier",
@@ -22,4 +23,5 @@ __all__ = [
     "KNNFairRankCV",
     "DANN",
     "DANNAdaptive",
+    "KNNWeighted",
 ]

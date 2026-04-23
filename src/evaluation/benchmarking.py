@@ -171,6 +171,7 @@ def run_benchmark(
     output_path: Path | None = None,
     n_jobs: int = 1,
     replace_algorithm: str | None = None,
+    n_repetitions: int | None = None,
 ) -> pd.DataFrame:
     """Run benchmark with incremental saving and (dataset, algorithm) resume.
 
@@ -190,15 +191,19 @@ def run_benchmark(
         If given, drop all existing rows for this algorithm name from
         output_path before running, forcing a full re-run of that algorithm
         only.  All other algorithms are left untouched.
+    n_repetitions : int or None
+        Override the n_repetitions value from config.  Useful for switching
+        between quick (1) and full (5) runs without editing config.yaml.
     """
     if replace_algorithm is not None and output_path is not None:
         _drop_algorithm(output_path, replace_algorithm)
 
     cfg = load_config()["evaluation"]
-    n_folds = cfg["cv_folds"] * cfg["n_repetitions"]
+    _n_reps = n_repetitions if n_repetitions is not None else cfg["n_repetitions"]
+    n_folds = cfg["cv_folds"] * _n_reps
     cv = RepeatedStratifiedKFold(
         n_splits=cfg["cv_folds"],
-        n_repeats=cfg["n_repetitions"],
+        n_repeats=_n_reps,
         random_state=load_config()["random_seed"],
     )
 
