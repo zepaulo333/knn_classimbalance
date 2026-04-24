@@ -9,16 +9,14 @@ from __future__ import annotations
 import numpy as np
 from numpy.typing import NDArray
 from sklearn.metrics import (
-    balanced_accuracy_score,
-    f1_score,
-    precision_score,
-    recall_score,
+    average_precision_score,
+    confusion_matrix,
     roc_auc_score,
 )
 
 
 def geometric_mean(y_true: NDArray, y_pred: NDArray) -> float:
-    """G-mean = sqrt(sensitivity * specificity)."""
+    """G-mean = sqrt(sensitivity * specificity). Used internally by KNNFairRankCV."""
     tp = np.sum((y_pred == 1) & (y_true == 1))
     tn = np.sum((y_pred == 0) & (y_true == 0))
     fp = np.sum((y_pred == 1) & (y_true == 0))
@@ -33,17 +31,29 @@ def compute_all_metrics(
     y_pred: NDArray,
     y_proba: NDArray | None = None,
 ) -> dict[str, float]:
-    """Return a dictionary of all relevant metrics for one fold."""
+    """Return raw confusion matrix counts plus probability-based scores.
+
+    All threshold-based metrics (MCC, F1, G-mean, etc.) are derived from
+    these counts in the analysis layer — adding a new metric never requires
+    re-running the benchmark.
+    """
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
     results: dict[str, float] = {
-        "f1": f1_score(y_true, y_pred, zero_division=0),
-        "precision": precision_score(y_true, y_pred, zero_division=0),
-        "recall": recall_score(y_true, y_pred, zero_division=0),
-        "balanced_accuracy": balanced_accuracy_score(y_true, y_pred),
-        "geometric_mean": geometric_mean(y_true, y_pred),
+        "tp": int(tp),
+        "tn": int(tn),
+        "fp": int(fp),
+        "fn": int(fn),
     }
     if y_proba is not None:
         try:
             results["roc_auc"] = roc_auc_score(y_true, y_proba)
         except ValueError:
             results["roc_auc"] = float("nan")
+        try:
+            results["pr_auc"] = average_precision_score(y_true, y_proba)
+        except ValueError:
+            results["pr_auc"] = float("nan")
+    else:
+        results["roc_auc"] = float("nan")
+        results["pr_auc"] = float("nan")
     return results

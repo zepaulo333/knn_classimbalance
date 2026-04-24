@@ -1,0 +1,8 @@
+algorithm,avg_rank
+KNNFairRankCV,3.175
+SMOTE+KNN,3.45
+KNNAdaptiveTopo,3.5
+KNNOptK,3.7
+KNNWeighted,4.275
+KNNFairRankMagnitude,4.9
+KNNFairRank,5.0

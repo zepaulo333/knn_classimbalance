@@ -1,0 +1,8 @@
+algorithm,f1,balanced_accuracy,geometric_mean,roc_auc
+KNNFairRankCV,0.5903,0.84,0.8261,0.8671
+KNNFairRank,0.5341,0.8315,0.8192,0.8629
+KNNFairRankMagnitude,0.5312,0.8258,0.8134,0.8793
+SMOTE+KNN,0.5954,0.8234,0.8074,0.8502
+KNNWeighted,0.583,0.8188,0.7967,0.8412
+KNNAdaptiveTopo,0.5807,0.7657,0.6749,0.7656
+KNNOptK,0.5855,0.7721,0.6727,0.8029

@@ -115,12 +115,12 @@ def _run_dataset(
             except Exception:
                 rows.append({
                     **row_base,
-                    "f1": float("nan"),
-                    "precision": float("nan"),
-                    "recall": float("nan"),
-                    "balanced_accuracy": float("nan"),
-                    "geometric_mean": float("nan"),
+                    "tp": float("nan"),
+                    "tn": float("nan"),
+                    "fp": float("nan"),
+                    "fn": float("nan"),
                     "roc_auc": float("nan"),
+                    "pr_auc": float("nan"),
                     "error": traceback.format_exc(limit=2),
                 })
 
@@ -225,6 +225,9 @@ def run_benchmark(
     if not remaining:
         print("  All combinations already complete — loading from cache.")
         return pd.read_csv(output_path)
+
+    print(f"  Running {len(remaining)} dataset(s) remaining"
+          f" ({len(estimators)} algorithm(s) each, {_n_reps} rep(s)).")
 
     # Seed return frames with existing data
     all_frames: list[pd.DataFrame] = []
