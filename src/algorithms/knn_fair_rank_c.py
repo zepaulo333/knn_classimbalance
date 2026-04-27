@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
-from sklearn.metrics import balanced_accuracy_score, f1_score
+from sklearn.metrics import balanced_accuracy_score, f1_score, matthews_corrcoef
 from sklearn.model_selection import StratifiedKFold
 
 from src.algorithms.knn_fair_rank import KNNFairRank
@@ -42,6 +42,8 @@ _SCORERS = {
     "geometric_mean": geometric_mean,
     "balanced_accuracy": balanced_accuracy_score,
     "f1": lambda y, yp: f1_score(y, yp, zero_division=0),
+    "mcc": matthews_corrcoef,
+    "combined": lambda y, yp: (matthews_corrcoef(y, yp) + geometric_mean(y, yp)) / 2,
 }
 
 

@@ -95,7 +95,53 @@ knn_fair_rank:
 knn_fair_rank_cv:
   alpha_grid: [0.25, 0.5, 0.75, 1.0]   # α candidates; inner CV selects one per dataset
   inner_cv_folds: 3                    # folds used to choose α (matches knn_opt_k style)
-  scoring: "geometric_mean"            # G-mean | balanced_accuracy | f1
+  scoring: "geometric_mean"              # combined | mcc | geometric_mean | balanced_accuracy | f1
+
+# ── KNN fair-rank LID (α derived from local intrinsic dimensionality) ──
+knn_fair_rank_lid:
+  alpha_min: 0.0           # lower bound on α (0 = allow full fall-back to no correction)
+  scale: 0.75              # sensitivity: α = 1 - scale * CV_LID
+  lid_sample_size: 200     # training points used for LID estimation
+  lid_k: 10                # neighbours per point in Levina-Bickel MLE
+
+# ── KNN fair-rank density (Modification E, rank-native) ──
+# Per-query k_eff(x) from a minority-budget local density (count maj within the
+# radius enclosing k_target minorities), Bayesian-shrunk toward v3's global r
+# with relative prior weight `shrinkage`. λ = 0 → pure local; λ = 1 → 50/50;
+# large λ → recovers v3.
+knn_fair_rank_density:
+  k_target: 50                   # minority budget for the local density estimate
+  shrinkage: 1.0                 # prior weight λ pulling k_eff(x) toward global r
+
+# ── KNN fair-rank joint CV (n_votes and α selected jointly by inner CV) ──
+knn_fair_rank_joint_cv:
+  n_votes_grid: [1, 2, 3, 5, 7, 10]   # same as opt-votes
+  alpha_grid: [0.25, 0.5, 0.75, 1.0]  # same as fair-rank-cv
+  inner_cv_folds: 3
+  scoring: "geometric_mean"
+
+# ── KNN fair-rank opt-votes (n_votes selected by inner CV) ──
+knn_fair_rank_opt_votes:
+  n_votes_grid: [1, 2, 3, 5, 7, 10]   # candidates; inner CV selects one per dataset
+  inner_cv_folds: 3                    # matches knn_fair_rank_cv style
+  scoring: "geometric_mean"            # geometric_mean | mcc | balanced_accuracy | f1 | combined
+
+# ── KNN fair-rank ensemble (α grid voting, binary) ──
+knn_fair_rank_ensemble:
+  alpha_grid: [0.25, 0.5, 0.75, 1.0]   # same grid as knn_fair_rank_cv; all values vote
+
+# ── KNN fair-rank magnitude ensemble (α grid voting, magnitude scores) ──
+knn_fair_rank_magnitude_ensemble:
+  alpha_grid: [0.25, 0.5, 0.75, 1.0]
+
+# ── KNN fair-rank jackknife (LOO over minority ranks) ──
+knn_fair_rank_jackknife:
+  k_probe: null   # null → uses n_votes (exclude each active vote participant once)
+
+# ── KNN fair-rank local odds (rank-native per-query k_eff) ──
+knn_fair_rank_local_odds:
+  k_probe: null    # null → uses k_min (all fetched minority distances contribute)
+  shrinkage: 1.0   # prior weight λ; large λ → recovers v3
 
 # ── DANN (baseline) ──────────────────────────
 dann:

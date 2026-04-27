@@ -165,6 +165,51 @@ def _drop_algorithm(output_path: Path, algorithm_name: str) -> Path | None:
     return backup_path
 
 
+def drop_algorithms(output_path: Path, algorithm_names: list[str]) -> Path | None:
+    """Backup the CSV, then remove all rows for the given algorithm names in-place.
+
+    Useful for trimming a results file to a chosen subset of algorithms without
+    re-running the full benchmark.
+
+    Parameters
+    ----------
+    output_path : Path
+        Path to the benchmark CSV (e.g. ``results/tables/benchmark_1rep.csv``).
+    algorithm_names : list[str]
+        Names of the algorithms whose rows should be removed.
+
+    Returns
+    -------
+    Path or None
+        Path to the timestamped backup file, or None if the CSV did not exist.
+
+    Example
+    -------
+    >>> from src.evaluation.benchmarking import drop_algorithms
+    >>> drop_algorithms(Path("results/tables/benchmark_1rep.csv"), [
+    ...     "KNNFairRankDensity",
+    ...     "KNNFairRankMagnitude",
+    ... ])
+    """
+    backup_path = _backup_csv(output_path)
+    existing = _load_existing(output_path)
+    if existing is None:
+        print("  No existing CSV found — nothing to drop.")
+        return backup_path
+    to_drop = set(algorithm_names)
+    filtered = existing[~existing["algorithm"].isin(to_drop)]
+    dropped = sorted(to_drop & set(existing["algorithm"].unique()))
+    not_found = sorted(to_drop - set(existing["algorithm"].unique()))
+    filtered.to_csv(output_path, index=False)
+    for name in dropped:
+        n = len(existing[existing["algorithm"] == name])
+        print(f"  Dropped {n:4d} rows for '{name}'.")
+    for name in not_found:
+        print(f"  '{name}' not found in CSV — skipped.")
+    print(f"  {len(filtered)} rows remaining ({filtered['algorithm'].nunique()} algorithms).")
+    return backup_path
+
+
 def run_benchmark(
     estimators: dict,
     datasets: list[Dataset],

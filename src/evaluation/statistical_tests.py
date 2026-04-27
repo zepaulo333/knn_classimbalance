@@ -61,7 +61,6 @@ def pairwise_wilcoxon(
     alpha = cfg["alpha"]
 
     pivot = results.groupby(["dataset", "algorithm"])[metric].mean().unstack("algorithm")
-    pivot = pivot.dropna()
 
     if baseline not in pivot.columns:
         raise ValueError(f"Baseline '{baseline}' not found in results.")
@@ -70,17 +69,25 @@ def pairwise_wilcoxon(
     for alg in pivot.columns:
         if alg == baseline:
             continue
-        stat, p = stats.wilcoxon(pivot[baseline].values, pivot[alg].values, zero_method="wilcox")
+        pair = pivot[[baseline, alg]].dropna()
+        if len(pair) < 2:
+            rows.append({"algorithm": alg, "statistic": float("nan"), "p_raw": float("nan")})
+            continue
+        stat, p = stats.wilcoxon(pair[baseline].values, pair[alg].values, zero_method="wilcox")
         rows.append({"algorithm": alg, "statistic": stat, "p_raw": p})
 
     df = pd.DataFrame(rows).sort_values("p_raw").reset_index(drop=True)
 
-    # Holm correction
-    m = len(df)
-    df["p_corrected"] = [
-        min(df["p_raw"].iloc[i] * (m - i), 1.0) for i in range(m)
-    ]
-    df["significant"] = df["p_corrected"] < alpha
+    # Holm correction — only over rows with a valid p-value
+    df = df.sort_values("p_raw").reset_index(drop=True)
+    valid = df["p_raw"].notna()
+    m = valid.sum()
+    p_corr = df["p_raw"].copy()
+    valid_idx = df.index[valid].tolist()
+    for rank, idx in enumerate(valid_idx):
+        p_corr.iloc[idx] = min(df["p_raw"].iloc[idx] * (m - rank), 1.0)
+    df["p_corrected"] = p_corr
+    df["significant"] = df["p_corrected"].fillna(1.0) < alpha
     return df
 
 
