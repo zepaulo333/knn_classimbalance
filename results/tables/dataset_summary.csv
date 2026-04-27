@@ -1,4 +1,4 @@
-dataset,n_samples,n_features,n_majority,n_minority,IR
+Dataset,N amostras,N features,N maioria,N minoria,IR
 dataset_1014_analcatdata_dmft,797,7,642,155,4.14
 dataset_867_visualizing_livestock,130,31,105,25,4.2
 dataset_875_analcatdata_chlamydia,100,17,81,19,4.26
