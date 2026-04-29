@@ -20,6 +20,7 @@ from .knn_fair_rank_jackknife import KNNFairRankJackknife
 from .knn_fair_rank_lid import KNNFairRankLID
 from .knn_fair_rank_jackknife_ens import KNNFairRankJackknifeEnsemble
 from .knn_fair_rank_local_odds_jackknife import KNNFairRankLocalOddsJackknife
+from .knn_fair_rank_topo_joint import KNNFairRankTopoJoint
 from .dann import DANN
 from .dann_adaptive import DANNAdaptive
 from .knn_weighted import KNNWeighted
@@ -46,6 +47,7 @@ __all__ = [
     "KNNFairRankLID",
     "KNNFairRankJackknifeEnsemble",
     "KNNFairRankLocalOddsJackknife",
+    "KNNFairRankTopoJoint",
     "DANN",
     "DANNAdaptive",
     "KNNWeighted",

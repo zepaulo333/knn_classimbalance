@@ -134,6 +134,12 @@ knn_fair_rank_ensemble:
 knn_fair_rank_magnitude_ensemble:
   alpha_grid: [0.25, 0.5, 0.75, 1.0]
 
+# ── KNN fair-rank topo-joint (Ward-gap topology, per-region k_eff) ──
+knn_fair_rank_topo_joint:
+  min_persistence_ratio: 0.05  # min gap / cloud diameter to accept a split
+  laplace_smooth: 1.0          # additive smoothing λ in (n_maj+λ)/(n_min+λ)
+  max_regions: 5               # cap on partition count (avoids degenerate fragmentation)
+
 # ── KNN fair-rank jackknife (LOO over minority ranks) ──
 knn_fair_rank_jackknife:
   k_probe: null   # null → uses n_votes (exclude each active vote participant once)

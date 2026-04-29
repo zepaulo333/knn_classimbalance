@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
+from joblib import Parallel, delayed
 from sklearn.metrics import balanced_accuracy_score, f1_score, matthews_corrcoef
 from sklearn.model_selection import StratifiedKFold
 
@@ -97,43 +98,53 @@ class KNNFairRankCV(KNNFairRank):
 
     # ── Inner CV selection ───────────────────────────────────────────────────
 
-    def _score_alpha(self, X: NDArray, y: NDArray, alpha: float) -> float:
-        """Average inner-CV score of KNNFairRank with k_eff = r^alpha."""
-        seed = load_config()["random_seed"]
-        cv = StratifiedKFold(n_splits=self._inner_cv_folds, shuffle=True, random_state=seed)
-        score_fn = _SCORERS[self._scoring]
-        scores = []
-        for tr, va in cv.split(X, y):
-            clf = KNNFairRank(
-                k_min=self._k_min,
-                k_maj_buffer=self._k_maj_buffer,
-                k_maj_floor=self._k_maj_floor,
-                k_maj_cap=self._k_maj_cap,
-                n_votes=self._n_votes,
-                n_jobs=1,
-            )
-            clf.fit(X[tr], y[tr])
-            # Dial the effective r without changing the fitted neighbourhoods.
-            # k_maj was sized with α=1 (i.e. k_maj ≥ r·n_votes + buffer), so
-            # for α ≤ 1 we have strictly more majority neighbours than we
-            # need — no under-sizing risk.
-            clf._r = clf._r ** alpha
-            y_pred = clf.predict(X[va])
-            scores.append(score_fn(y[va], y_pred))
-        return float(np.mean(scores)) if scores else -np.inf
+    def _fit_fold(
+        self, X_tr: NDArray, y_tr: NDArray, X_va: NDArray, y_va: NDArray, alpha: float
+    ) -> float:
+        clf = KNNFairRank(
+            k_min=self._k_min,
+            k_maj_buffer=self._k_maj_buffer,
+            k_maj_floor=self._k_maj_floor,
+            k_maj_cap=self._k_maj_cap,
+            n_votes=self._n_votes,
+            n_jobs=1,
+        )
+        clf.fit(X_tr, y_tr)
+        # Dial the effective r without changing the fitted neighbourhoods.
+        # k_maj was sized with α=1 (i.e. k_maj ≥ r·n_votes + buffer), so
+        # for α ≤ 1 we have strictly more majority neighbours than we
+        # need — no under-sizing risk.
+        clf._r = clf._r ** alpha
+        return _SCORERS[self._scoring](y_va, clf.predict(X_va))
 
     def fit(self, X: ArrayLike, y: ArrayLike) -> "KNNFairRankCV":
         X_arr = np.asarray(X, dtype=float)
         y_arr = np.asarray(y)
 
-        # Select α that maximises the chosen metric on inner CV.
-        best_alpha = 1.0
-        best_score = -np.inf
-        for alpha in self._alpha_grid:
-            score = self._score_alpha(X_arr, y_arr, alpha)
-            if score > best_score:
-                best_score = score
-                best_alpha = alpha
+        seed = load_config()["random_seed"]
+        cv = StratifiedKFold(n_splits=self._inner_cv_folds, shuffle=True, random_state=seed)
+        splits = list(cv.split(X_arr, y_arr))
+
+        # Parallelise over all (alpha, fold) pairs.
+        work = [(alpha, tr, va) for alpha in self._alpha_grid for tr, va in splits]
+
+        if self.n_jobs == 1:
+            fold_scores = [
+                self._fit_fold(X_arr[tr], y_arr[tr], X_arr[va], y_arr[va], alpha)
+                for alpha, tr, va in work
+            ]
+        else:
+            fold_scores = Parallel(n_jobs=self.n_jobs, prefer="threads")(
+                delayed(self._fit_fold)(X_arr[tr], y_arr[tr], X_arr[va], y_arr[va], alpha)
+                for alpha, tr, va in work
+            )
+
+        # Average fold scores per alpha, pick the best.
+        alpha_scores: dict[float, list[float]] = {}
+        for (alpha, _, _), s in zip(work, fold_scores):
+            alpha_scores.setdefault(alpha, []).append(s)
+
+        best_alpha = max(alpha_scores, key=lambda a: float(np.mean(alpha_scores[a])))
         self._alpha = best_alpha
         self.best_alpha_ = best_alpha  # public alias for inspection
 
