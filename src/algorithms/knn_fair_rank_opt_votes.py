@@ -135,7 +135,7 @@ class KNNFairRankOptVotes(KNNFairRank):
                 for nv, tr, va in work
             ]
         else:
-            fold_scores = Parallel(n_jobs=self.n_jobs, prefer="threads")(
+            fold_scores = Parallel(n_jobs=self.n_jobs)(
                 delayed(self._fit_fold)(X_arr[tr], y_arr[tr], X_arr[va], y_arr[va], nv)
                 for nv, tr, va in work
             )

@@ -56,7 +56,7 @@ class KNNBase:
         if self.n_jobs == 1:
             return np.array([self._predict_x(x) for x in X])
         return np.array(
-            Parallel(n_jobs=self.n_jobs, prefer="threads")(
+            Parallel(n_jobs=self.n_jobs)(
                 delayed(self._predict_x)(x) for x in X
             )
         )
@@ -66,7 +66,7 @@ class KNNBase:
         if self.n_jobs == 1:
             return np.array([self._predict_proba_x(x) for x in X])
         return np.array(
-            Parallel(n_jobs=self.n_jobs, prefer="threads")(
+            Parallel(n_jobs=self.n_jobs)(
                 delayed(self._predict_proba_x)(x) for x in X
             )
         )
@@ -197,7 +197,7 @@ class KNNOptK:
             for X_tr, X_val, y_tr, y_val in splits
             for k in k_range
         ]
-        results = Parallel(n_jobs=self.n_jobs, prefer="threads")(
+        results = Parallel(n_jobs=self.n_jobs)(
             delayed(_eval_k)(X_tr, X_val, y_tr, y_val, k)
             for X_tr, X_val, y_tr, y_val, k in jobs
         )

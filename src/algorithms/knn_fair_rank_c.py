@@ -48,6 +48,11 @@ _SCORERS = {
 }
 
 
+def _make_scalarized_scorer(mcc_weight: float):
+    w = float(mcc_weight)
+    return lambda y, yp: w * matthews_corrcoef(y, yp) + (1.0 - w) * geometric_mean(y, yp)
+
+
 class KNNFairRankCV(KNNFairRank):
     """KNNFairRank with α tuned via inner stratified K-fold CV.
 
@@ -67,6 +72,7 @@ class KNNFairRankCV(KNNFairRank):
         alpha_grid: list[float] | None = None,
         inner_cv_folds: int | None = None,
         scoring: str | None = None,
+        mcc_weight: float | None = None,
         k_min: int | None = None,
         k_maj_buffer: int | None = None,
         k_maj_floor: int | None = None,
@@ -82,10 +88,16 @@ class KNNFairRankCV(KNNFairRank):
             inner_cv_folds if inner_cv_folds is not None else cfg.get("inner_cv_folds", 3)
         )
         self._scoring = scoring if scoring is not None else cfg.get("scoring", "geometric_mean")
-        if self._scoring not in _SCORERS:
-            raise ValueError(
-                f"Unknown scoring '{self._scoring}'. Valid: {list(_SCORERS)}"
-            )
+        _valid = set(_SCORERS) | {"scalarized", "utopia"}
+        if self._scoring not in _valid:
+            raise ValueError(f"Unknown scoring '{self._scoring}'. Valid: {sorted(_valid)}")
+        _mcc_weight = mcc_weight if mcc_weight is not None else float(cfg.get("mcc_weight", 0.5))
+        if self._scoring == "scalarized":
+            self._scorer_fn = _make_scalarized_scorer(_mcc_weight)
+        elif self._scoring == "utopia":
+            self._scorer_fn = None  # handled separately in _fit_fold / fit
+        else:
+            self._scorer_fn = _SCORERS[self._scoring]
         self._alpha: float = 1.0  # selected during fit()
         super().__init__(
             k_min=k_min,
@@ -100,7 +112,7 @@ class KNNFairRankCV(KNNFairRank):
 
     def _fit_fold(
         self, X_tr: NDArray, y_tr: NDArray, X_va: NDArray, y_va: NDArray, alpha: float
-    ) -> float:
+    ) -> "float | tuple[float, float]":
         clf = KNNFairRank(
             k_min=self._k_min,
             k_maj_buffer=self._k_maj_buffer,
@@ -110,12 +122,11 @@ class KNNFairRankCV(KNNFairRank):
             n_jobs=1,
         )
         clf.fit(X_tr, y_tr)
-        # Dial the effective r without changing the fitted neighbourhoods.
-        # k_maj was sized with α=1 (i.e. k_maj ≥ r·n_votes + buffer), so
-        # for α ≤ 1 we have strictly more majority neighbours than we
-        # need — no under-sizing risk.
         clf._r = clf._r ** alpha
-        return _SCORERS[self._scoring](y_va, clf.predict(X_va))
+        preds = clf.predict(X_va)
+        if self._scoring == "utopia":
+            return (matthews_corrcoef(y_va, preds), geometric_mean(y_va, preds))
+        return self._scorer_fn(y_va, preds)
 
     def fit(self, X: ArrayLike, y: ArrayLike) -> "KNNFairRankCV":
         X_arr = np.asarray(X, dtype=float)
@@ -125,7 +136,6 @@ class KNNFairRankCV(KNNFairRank):
         cv = StratifiedKFold(n_splits=self._inner_cv_folds, shuffle=True, random_state=seed)
         splits = list(cv.split(X_arr, y_arr))
 
-        # Parallelise over all (alpha, fold) pairs.
         work = [(alpha, tr, va) for alpha in self._alpha_grid for tr, va in splits]
 
         if self.n_jobs == 1:
@@ -134,21 +144,38 @@ class KNNFairRankCV(KNNFairRank):
                 for alpha, tr, va in work
             ]
         else:
-            fold_scores = Parallel(n_jobs=self.n_jobs, prefer="threads")(
+            fold_scores = Parallel(n_jobs=self.n_jobs)(
                 delayed(self._fit_fold)(X_arr[tr], y_arr[tr], X_arr[va], y_arr[va], alpha)
                 for alpha, tr, va in work
             )
 
-        # Average fold scores per alpha, pick the best.
-        alpha_scores: dict[float, list[float]] = {}
+        alpha_scores: dict[float, list] = {}
         for (alpha, _, _), s in zip(work, fold_scores):
             alpha_scores.setdefault(alpha, []).append(s)
 
-        best_alpha = max(alpha_scores, key=lambda a: float(np.mean(alpha_scores[a])))
-        self._alpha = best_alpha
-        self.best_alpha_ = best_alpha  # public alias for inspection
+        if self._scoring == "utopia":
+            # Each entry is (mcc, gmean); select α closest to the Utopia point.
+            alpha_means = {
+                a: (float(np.mean([s[0] for s in ss])),
+                    float(np.mean([s[1] for s in ss])))
+                for a, ss in alpha_scores.items()
+            }
+            u_mcc   = max(v[0] for v in alpha_means.values())
+            u_gmean = max(v[1] for v in alpha_means.values())
+            eps = 1e-9
+            best_alpha = min(
+                alpha_means,
+                key=lambda a: (
+                    ((alpha_means[a][0] - u_mcc)   / (u_mcc   + eps)) ** 2 +
+                    ((alpha_means[a][1] - u_gmean) / (u_gmean + eps)) ** 2
+                ),
+            )
+        else:
+            best_alpha = max(alpha_scores, key=lambda a: float(np.mean(alpha_scores[a])))
 
-        # Fit the outer model on all training data; _vote_fraction uses α.
+        self._alpha = best_alpha
+        self.best_alpha_ = best_alpha
+
         super().fit(X_arr, y_arr)
         return self
 

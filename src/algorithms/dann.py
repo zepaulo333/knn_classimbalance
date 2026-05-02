@@ -59,7 +59,7 @@ class DANN:
         if self.n_jobs == 1:
             return np.array([self._predict_single(x) for x in X])
         return np.array(
-            Parallel(n_jobs=self.n_jobs, prefer="threads")(
+            Parallel(n_jobs=self.n_jobs)(
                 delayed(self._predict_single)(x) for x in X
             )
         )
@@ -69,7 +69,7 @@ class DANN:
         if self.n_jobs == 1:
             return np.array([self._predict_proba_single(x) for x in X])
         return np.array(
-            Parallel(n_jobs=self.n_jobs, prefer="threads")(
+            Parallel(n_jobs=self.n_jobs)(
                 delayed(self._predict_proba_single)(x) for x in X
             )
         )

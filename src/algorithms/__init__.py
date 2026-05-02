@@ -16,11 +16,18 @@ from .knn_fair_rank_b_ens import KNNFairRankMagnitudeEnsemble
 from .knn_fair_rank_opt_votes import KNNFairRankOptVotes
 from .knn_fair_rank_joint_cv import KNNFairRankJointCV
 from .knn_fair_rank_local_odds import KNNFairRankLocalOdds
+from .knn_fair_rank_local_count import KNNFairRankLocalCount
+from .knn_fair_rank_bayesian import KNNFairRankBayesian
+from .knn_fair_rank_density_region import KNNFairRankDensityRegion
 from .knn_fair_rank_jackknife import KNNFairRankJackknife
 from .knn_fair_rank_lid import KNNFairRankLID
 from .knn_fair_rank_jackknife_ens import KNNFairRankJackknifeEnsemble
 from .knn_fair_rank_local_odds_jackknife import KNNFairRankLocalOddsJackknife
 from .knn_fair_rank_topo_joint import KNNFairRankTopoJoint
+try:
+    from .knn_fair_rank_topo_count import KNNFairRankTopoCount
+except ImportError:
+    KNNFairRankTopoCount = None  # ripser not installed
 from .dann import DANN
 from .dann_adaptive import DANNAdaptive
 from .knn_weighted import KNNWeighted
@@ -43,11 +50,15 @@ __all__ = [
     "KNNFairRankOptVotes",
     "KNNFairRankJointCV",
     "KNNFairRankLocalOdds",
+    "KNNFairRankLocalCount",
+    "KNNFairRankBayesian",
+    "KNNFairRankDensityRegion",
     "KNNFairRankJackknife",
     "KNNFairRankLID",
     "KNNFairRankJackknifeEnsemble",
     "KNNFairRankLocalOddsJackknife",
     "KNNFairRankTopoJoint",
+    "KNNFairRankTopoCount",
     "DANN",
     "DANNAdaptive",
     "KNNWeighted",

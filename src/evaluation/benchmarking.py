@@ -215,7 +215,7 @@ def run_benchmark(
     datasets: list[Dataset],
     output_path: Path | None = None,
     n_jobs: int = 1,
-    replace_algorithm: str | None = None,
+    replace_algorithm: "str | list[str] | None" = None,
     n_repetitions: int | None = None,
 ) -> pd.DataFrame:
     """Run benchmark with incremental saving and (dataset, algorithm) resume.
@@ -241,7 +241,9 @@ def run_benchmark(
         between quick (1) and full (5) runs without editing config.yaml.
     """
     if replace_algorithm is not None and output_path is not None:
-        _drop_algorithm(output_path, replace_algorithm)
+        names = [replace_algorithm] if isinstance(replace_algorithm, str) else replace_algorithm
+        for name in names:
+            _drop_algorithm(output_path, name)
 
     cfg = load_config()["evaluation"]
     _n_reps = n_repetitions if n_repetitions is not None else cfg["n_repetitions"]
@@ -294,7 +296,7 @@ def run_benchmark(
             n_algs_ran = df_chunk["algorithm"].nunique()
             print(f"  [{i+1}/{len(remaining)}] {ds.name}  ({n_algs_ran} alg(s)){err_str}")
     else:
-        gen = Parallel(n_jobs=n_jobs, prefer="threads", return_as="generator_unordered")(
+        gen = Parallel(n_jobs=n_jobs, return_as="generator_unordered")(
             delayed(_run_dataset)(ds, estimators, cv, cfg["cv_folds"], done_pairs)
             for ds in remaining
         )
