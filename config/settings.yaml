@@ -148,11 +148,21 @@ knn_fair_rank_topo_count:
   k_max: null              # null → adaptive max(floor(sqrt(N)), r·k_ref) at fit time
   min_persistence_ratio: 0.05  # min gap / max_death to accept ε* (else LocalCount fallback)
 
+# ── KNN fair-rank topo-joint bootstrap (bootstrap-stabilised topology, §23) ──
+# Fits KNNFairRankTopoJoint B times on bootstrap resamples of the training fold.
+# Each training point receives a stability score s(p) = fraction of bootstraps
+# where topology fired and p was assigned to a distinct region.
+# At inference: if s(nearest training point) >= tau → use bootstrap-consensus
+# k_eff; otherwise fall back to KNNFairRankJointCV (alpha*, n_votes*).
+knn_fair_rank_topo_joint_bootstrap:
+  n_bootstrap: 20          # bootstrap resamples for OOB reliability estimation
+  oob_baseline_alpha: 0.75 # k_eff = r^alpha used as OOB comparison baseline
+
 # ── KNN fair-rank topo-joint (Ward-gap topology, per-region k_eff) ──
 knn_fair_rank_topo_joint:
   min_persistence_ratio: 0.05  # min gap / cloud diameter to accept a split
   laplace_smooth: 1.0          # additive smoothing λ in (n_maj+λ)/(n_min+λ)
-  max_regions: 5               # cap on partition count (avoids degenerate fragmentation)
+  min_region_samples: null     # null → adaptive max(10, floor(sqrt(n))) at fit time
 
 # ── KNN fair-rank jackknife (LOO over minority ranks) ──
 knn_fair_rank_jackknife:
