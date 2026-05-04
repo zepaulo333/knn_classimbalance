@@ -93,9 +93,109 @@ knn_fair_rank:
 
 # ── KNN fair-rank CV (calibrated exponent k_eff = round(r^α)) ──
 knn_fair_rank_cv:
-  alpha_grid: [0.25, 0.5, 0.75, 1.0]   # α candidates; inner CV selects one per dataset
-  inner_cv_folds: 3                    # folds used to choose α (matches knn_opt_k style)
-  scoring: "geometric_mean"            # G-mean | balanced_accuracy | f1
+  alpha_grid: [0.25, 0.5, 0.75, 1.0]
+  inner_cv_folds: 3
+  scoring: "geometric_mean" # utopia | scalarized | geometric_mean | mcc | combined | balanced_accuracy | f1
+  mcc_weight: 0.5          # only used when scoring=scalarized: weight on MCC in w·MCC + (1-w)·G-mean
+
+# ── KNN fair-rank LID (α derived from local intrinsic dimensionality) ──
+knn_fair_rank_lid:
+  alpha_min: 0.0           # lower bound on α (0 = allow full fall-back to no correction)
+  scale: 0.75              # sensitivity: α = 1 - scale * CV_LID
+  lid_sample_size: 200     # training points used for LID estimation
+  lid_k: 10                # neighbours per point in Levina-Bickel MLE
+
+# ── KNN fair-rank density (Modification E, rank-native) ──
+# Per-query k_eff(x) from a minority-budget local density (count maj within the
+# radius enclosing k_target minorities), Bayesian-shrunk toward v3's global r
+# with relative prior weight `shrinkage`. λ = 0 → pure local; λ = 1 → 50/50;
+# large λ → recovers v3.
+knn_fair_rank_density:
+  k_target: 50                   # minority budget for the local density estimate
+  shrinkage: 1.0                 # prior weight λ pulling k_eff(x) toward global r
+
+# ── KNN fair-rank joint CV (n_votes and α selected jointly by inner CV) ──
+knn_fair_rank_joint_cv:
+  n_votes_grid: [1, 2, 3, 5, 7, 10]
+  alpha_grid: [0.25, 0.5, 0.75, 1.0]
+  inner_cv_folds: 3
+  scoring: "geometric_mean" # utopia | scalarized | geometric_mean | mcc | combined | balanced_accuracy | f1
+  mcc_weight: 0.5          # only used when scoring=scalarized
+
+# ── KNN fair-rank opt-votes (n_votes selected by inner CV) ──
+knn_fair_rank_opt_votes:
+  n_votes_grid: [1, 2, 3, 5, 7, 10]   # candidates; inner CV selects one per dataset
+  inner_cv_folds: 3                    # matches knn_fair_rank_cv style
+  scoring: "geometric_mean"            # geometric_mean | mcc | balanced_accuracy | f1 | combined
+
+# ── KNN fair-rank ensemble ((n_votes, α) grid voting, no CV) ──
+# Sweeps the full joint grid at inference time.  Defaults mirror JointCV so
+# the ensemble covers exactly the same search space without committing to one pair.
+knn_fair_rank_ensemble:
+  alpha_grid: [0.25, 0.5, 0.75, 1.0]
+  n_votes_grid: [1, 2, 3, 5, 7, 10]
+
+# ── KNN fair-rank magnitude ensemble (α grid voting, magnitude scores) ──
+knn_fair_rank_magnitude_ensemble:
+  alpha_grid: [0.25, 0.5, 0.75, 1.0]
+
+# ── KNN fair-rank topo-count (joint PH scale + per-class counting, §22) ──
+# Per-query k_eff(x) = n_maj_ball / n_min_ball counted at the topology-derived
+# scale ε*(x) — the H0 death time just before the largest gap in the joint
+# Vietoris-Rips filtration over x's k_max nearest neighbours.
+# Invariant: k_min_eff = k_maj_eff = k_max (prevents boundary degenerate case).
+knn_fair_rank_topo_count:
+  k_max: null              # null → adaptive max(floor(sqrt(N)), r·k_ref) at fit time
+  min_persistence_ratio: 0.05  # min gap / max_death to accept ε* (else LocalCount fallback)
+
+# ── KNN fair-rank topo-joint bootstrap (bootstrap-stabilised topology, §23) ──
+# Fits KNNFairRankTopoJoint B times on bootstrap resamples of the training fold.
+# Each training point receives a stability score s(p) = fraction of bootstraps
+# where topology fired and p was assigned to a distinct region.
+# At inference: if s(nearest training point) >= tau → use bootstrap-consensus
+# k_eff; otherwise fall back to KNNFairRankJointCV (alpha*, n_votes*).
+knn_fair_rank_topo_joint_bootstrap:
+  n_bootstrap: 20          # bootstrap resamples for OOB reliability estimation
+  oob_baseline_alpha: 0.75 # k_eff = r^alpha used as OOB comparison baseline
+
+# ── KNN fair-rank topo-joint (Ward-gap topology, per-region k_eff) ──
+knn_fair_rank_topo_joint:
+  min_persistence_ratio: 0.05  # min gap / cloud diameter to accept a split
+  laplace_smooth: 1.0          # additive smoothing λ in (n_maj+λ)/(n_min+λ)
+  min_region_samples: null     # null → adaptive max(10, floor(sqrt(n))) at fit time
+
+# ── KNN fair-rank jackknife (LOO over minority ranks) ──
+knn_fair_rank_jackknife:
+  k_probe: null   # null → uses n_votes (exclude each active vote participant once)
+
+# ── KNN fair-rank local odds (rank-native per-query k_eff) ──
+knn_fair_rank_local_odds:
+  k_probe: null    # null → uses k_min (all fetched minority distances contribute)
+  shrinkage: 1.0   # prior weight λ; large λ → recovers v3
+
+# ── KNN fair-rank density-region (§17) ──────────────────────────────────────
+# Estimates ρ̂(x_i) at each minority training point via §20 counting (LOO),
+# then gap-detects a partition of the sorted ρ̂ values into regions where
+# every region has ≥ k_ref minority points (reliability guard from §17.1).
+# At inference, the query's own ρ̂ is binary-searched into the stored thresholds.
+knn_fair_rank_density_region:
+  k_ref: null               # null → adaptive max(3, floor(sqrt(N_min)))
+  min_persistence_ratio: 0.1  # normalised ρ̂-gap threshold to accept a boundary
+
+# ── KNN fair-rank Bayesian α-shrinkage (§21) ────────────────────────────────
+# Blends the joint-CV global α with a per-query local estimate via Bühlmann
+# credibility:  α_final(x) = w(x)·α_CV + (1−w(x))·α_local(x)
+# where w(x) = k_ref / (k_ref + n_maj_local(x)).  No extra hyperparameter.
+knn_fair_rank_bayesian:
+  k_ref: null      # null → adaptive max(3, floor(sqrt(N_min))) at fit time
+
+# ── KNN fair-rank local count (per-class counting per-query k_eff) ──
+# Single deterministic estimate at the k_ref-th minority neighbour:
+#   k_eff(x) = #{maj within d_{k_ref,min}(x)} / k_ref
+# Trades the LocalOdds median over noisy rank-1..k_probe estimates for one
+# better-conditioned estimate with a fixed minority denominator.
+knn_fair_rank_local_count:
+  k_ref: null      # null → adaptive max(3, floor(sqrt(N_min))) at fit time
 
 # ── DANN (baseline) ──────────────────────────
 dann:

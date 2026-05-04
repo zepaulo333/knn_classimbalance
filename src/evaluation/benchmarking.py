@@ -165,12 +165,57 @@ def _drop_algorithm(output_path: Path, algorithm_name: str) -> Path | None:
     return backup_path
 
 
+def drop_algorithms(output_path: Path, algorithm_names: list[str]) -> Path | None:
+    """Backup the CSV, then remove all rows for the given algorithm names in-place.
+
+    Useful for trimming a results file to a chosen subset of algorithms without
+    re-running the full benchmark.
+
+    Parameters
+    ----------
+    output_path : Path
+        Path to the benchmark CSV (e.g. ``results/tables/benchmark_1rep.csv``).
+    algorithm_names : list[str]
+        Names of the algorithms whose rows should be removed.
+
+    Returns
+    -------
+    Path or None
+        Path to the timestamped backup file, or None if the CSV did not exist.
+
+    Example
+    -------
+    >>> from src.evaluation.benchmarking import drop_algorithms
+    >>> drop_algorithms(Path("results/tables/benchmark_1rep.csv"), [
+    ...     "KNNFairRankDensity",
+    ...     "KNNFairRankMagnitude",
+    ... ])
+    """
+    backup_path = _backup_csv(output_path)
+    existing = _load_existing(output_path)
+    if existing is None:
+        print("  No existing CSV found — nothing to drop.")
+        return backup_path
+    to_drop = set(algorithm_names)
+    filtered = existing[~existing["algorithm"].isin(to_drop)]
+    dropped = sorted(to_drop & set(existing["algorithm"].unique()))
+    not_found = sorted(to_drop - set(existing["algorithm"].unique()))
+    filtered.to_csv(output_path, index=False)
+    for name in dropped:
+        n = len(existing[existing["algorithm"] == name])
+        print(f"  Dropped {n:4d} rows for '{name}'.")
+    for name in not_found:
+        print(f"  '{name}' not found in CSV — skipped.")
+    print(f"  {len(filtered)} rows remaining ({filtered['algorithm'].nunique()} algorithms).")
+    return backup_path
+
+
 def run_benchmark(
     estimators: dict,
     datasets: list[Dataset],
     output_path: Path | None = None,
     n_jobs: int = 1,
-    replace_algorithm: str | None = None,
+    replace_algorithm: "str | list[str] | None" = None,
     n_repetitions: int | None = None,
 ) -> pd.DataFrame:
     """Run benchmark with incremental saving and (dataset, algorithm) resume.
@@ -196,7 +241,9 @@ def run_benchmark(
         between quick (1) and full (5) runs without editing config.yaml.
     """
     if replace_algorithm is not None and output_path is not None:
-        _drop_algorithm(output_path, replace_algorithm)
+        names = [replace_algorithm] if isinstance(replace_algorithm, str) else replace_algorithm
+        for name in names:
+            _drop_algorithm(output_path, name)
 
     cfg = load_config()["evaluation"]
     _n_reps = n_repetitions if n_repetitions is not None else cfg["n_repetitions"]
@@ -249,7 +296,7 @@ def run_benchmark(
             n_algs_ran = df_chunk["algorithm"].nunique()
             print(f"  [{i+1}/{len(remaining)}] {ds.name}  ({n_algs_ran} alg(s)){err_str}")
     else:
-        gen = Parallel(n_jobs=n_jobs, prefer="threads", return_as="generator_unordered")(
+        gen = Parallel(n_jobs=n_jobs, return_as="generator_unordered")(
             delayed(_run_dataset)(ds, estimators, cv, cfg["cv_folds"], done_pairs)
             for ds in remaining
         )
