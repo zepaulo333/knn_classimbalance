@@ -217,6 +217,7 @@ def run_benchmark(
     n_jobs: int = 1,
     replace_algorithm: "str | list[str] | None" = None,
     n_repetitions: int | None = None,
+    n_cv_splits: int | None = None,
 ) -> pd.DataFrame:
     """Run benchmark with incremental saving and (dataset, algorithm) resume.
 
@@ -239,6 +240,12 @@ def run_benchmark(
     n_repetitions : int or None
         Override the n_repetitions value from config.  Useful for switching
         between quick (1) and full (5) runs without editing config.yaml.
+    n_cv_splits : int or None
+        Override the cv_folds value from config.  Used for degenerate datasets
+        that cannot support 10-fold CV — pass a smaller value (e.g. 5) while
+        doubling n_repetitions to keep total evaluations constant.
+        Results must be stored in a separate CSV from the standard run because
+        the fold layout differs.
     """
     if replace_algorithm is not None and output_path is not None:
         names = [replace_algorithm] if isinstance(replace_algorithm, str) else replace_algorithm
@@ -246,10 +253,11 @@ def run_benchmark(
             _drop_algorithm(output_path, name)
 
     cfg = load_config()["evaluation"]
-    _n_reps = n_repetitions if n_repetitions is not None else cfg["n_repetitions"]
-    n_folds = cfg["cv_folds"] * _n_reps
+    _n_reps   = n_repetitions if n_repetitions is not None else cfg["n_repetitions"]
+    _n_splits = n_cv_splits   if n_cv_splits   is not None else cfg["cv_folds"]
+    n_folds   = _n_splits * _n_reps
     cv = RepeatedStratifiedKFold(
-        n_splits=cfg["cv_folds"],
+        n_splits=_n_splits,
         n_repeats=_n_reps,
         random_state=load_config()["random_seed"],
     )
@@ -274,7 +282,7 @@ def run_benchmark(
         return pd.read_csv(output_path)
 
     print(f"  Running {len(remaining)} dataset(s) remaining"
-          f" ({len(estimators)} algorithm(s) each, {_n_reps} rep(s)).")
+          f" ({len(estimators)} algorithm(s) each, {_n_reps} rep(s) × {_n_splits}-fold).")
 
     # Seed return frames with existing data
     all_frames: list[pd.DataFrame] = []

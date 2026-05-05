@@ -1,0 +1,11 @@
+algorithm,avg_rank
+KNNFairRankEnsemble,3.812
+KNNFairRankJointCV,4.2
+KNNOptK,4.475
+KNNFairRankCV,4.738
+SMOTE+KNN,5.362
+KNNFairRankJackknife,5.7
+KNNFairRankTopoJointBootstrap,6.012
+KNNFairRankOptVotes,6.35
+KNNWeighted,6.638
+KNNFairRank,7.712
