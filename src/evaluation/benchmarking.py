@@ -210,6 +210,40 @@ def drop_algorithms(output_path: Path, algorithm_names: list[str]) -> Path | Non
     return backup_path
 
 
+def drop_datasets(output_path: Path, dataset_names: list[str]) -> Path | None:
+    """Backup the CSV, then remove all rows for the given dataset names in-place.
+
+    Parameters
+    ----------
+    output_path : Path
+        Path to the benchmark CSV.
+    dataset_names : list[str]
+        Names of the datasets whose rows should be removed.
+
+    Returns
+    -------
+    Path or None
+        Path to the timestamped backup file, or None if the CSV did not exist.
+    """
+    backup_path = _backup_csv(output_path)
+    existing = _load_existing(output_path)
+    if existing is None:
+        print("  No existing CSV found — nothing to drop.")
+        return backup_path
+    to_drop = set(dataset_names)
+    filtered = existing[~existing["dataset"].isin(to_drop)]
+    dropped = sorted(to_drop & set(existing["dataset"].unique()))
+    not_found = sorted(to_drop - set(existing["dataset"].unique()))
+    filtered.to_csv(output_path, index=False)
+    for name in dropped:
+        n = len(existing[existing["dataset"] == name])
+        print(f"  Dropped {n:4d} rows for dataset '{name}'.")
+    for name in not_found:
+        print(f"  Dataset '{name}' not found in CSV — skipped.")
+    print(f"  {len(filtered)} rows remaining ({filtered['dataset'].nunique()} datasets).")
+    return backup_path
+
+
 def run_benchmark(
     estimators: dict,
     datasets: list[Dataset],
