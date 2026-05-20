@@ -38,14 +38,6 @@ htmlcov/
 __MACOSX/
 Thumbs.db
 
-# Project-specific
-data/raw/
-data/processed/
-results/figures/
-results/tables/
-results/**/*.bak
-results/**/*_backup_*.csv
-
 # Large / generated files
 *.log
 *.tmp
