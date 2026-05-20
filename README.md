@@ -117,6 +117,12 @@ This means any estimator can be plugged directly into `run_benchmark()`.
 
 ---
 
+## Known limitations
+
+**Categorical NaN encoding.** Six datasets contain NaN values in categorical feature columns (`dataset_1000_hypothyroid`, `dataset_38_sick`, `dataset_1002_ipums_la_98-small`, `dataset_1018_ipums_la_99-small`, `dataset_1023_soybean`, `dataset_968_analcatdata_birthday`). These are passed directly to `OneHotEncoder`, which encodes NaN as a spurious extra category rather than imputing it. Numerical NaN values are correctly imputed with column medians. Since all algorithms see the same feature matrix, cross-algorithm comparisons on these datasets remain fair, but their absolute performance figures should be interpreted with this in mind.
+
+---
+
 ## Cleaning results
 
 ```bash

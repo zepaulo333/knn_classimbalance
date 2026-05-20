@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environments / conda
+.env
+.venv
+env/
+venv/
+*.conda/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+__MACOSX/
+Thumbs.db
+
+# Project-specific
+data/raw/
+data/processed/
+results/figures/
+results/tables/
+results/**/*.bak
+results/**/*_backup_*.csv
+
+# Large / generated files
+*.log
+*.tmp
