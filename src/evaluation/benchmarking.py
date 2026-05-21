@@ -333,7 +333,7 @@ def run_benchmark(
 
     if n_jobs == 1:
         for i, ds in enumerate(remaining):
-            chunk_rows = _run_dataset(ds, estimators, cv, cfg["cv_folds"], done_pairs)
+            chunk_rows = _run_dataset(ds, estimators, cv, _n_splits, done_pairs)
             if not chunk_rows:
                 continue
             df_chunk = pd.DataFrame(chunk_rows)
@@ -346,7 +346,7 @@ def run_benchmark(
             print(f"  [{i+1}/{len(remaining)}] {ds.name}  ({n_algs_ran} alg(s)){err_str}")
     else:
         gen = Parallel(n_jobs=n_jobs, return_as="generator_unordered")(
-            delayed(_run_dataset)(ds, estimators, cv, cfg["cv_folds"], done_pairs)
+            delayed(_run_dataset)(ds, estimators, cv, _n_splits, done_pairs)
             for ds in remaining
         )
         for i, chunk_rows in enumerate(gen):

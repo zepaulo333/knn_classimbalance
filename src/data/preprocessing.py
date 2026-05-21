@@ -28,5 +28,6 @@ def binarise_labels(y: NDArray) -> NDArray:
 
 def remove_constant_features(X: NDArray) -> NDArray:
     """Drop features with zero variance."""
-    mask = X.std(axis=0) > 0
+    std = np.nanstd(X, axis=0)
+    mask = np.isfinite(std) & (std > 0)
     return X[:, mask]
