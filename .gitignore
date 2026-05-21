@@ -41,3 +41,29 @@ Thumbs.db
 # Large / generated files
 *.log
 *.tmp
+
+# ─── Sync-conflict duplicates (iCloud / Dropbox / OneDrive) ──────────────────
+# Match patterns like "file 2.py", "file 3.csv", "notebook 4.ipynb"
+* 2.*
+* 3.*
+* 4.*
+*\ 2.*
+*\ 3.*
+*\ 4.*
+*/__pycache__\ */
+*/__pycache__\ 2/
+*/__pycache__\ 3/
+
+# ─── Incremental development backups ─────────────────────────────────────────
+# We keep the canonical benchmark CSVs; backups are local-only.
+results/tables/benchmark_*_backup_*.csv
+results/tables/benchmark_*_backup_threshold_*.csv
+
+# ─── Sandbox / scratch notebooks ─────────────────────────────────────────────
+# Development notebooks live in sandbox/; only entrega_final.ipynb is the deliverable.
+notebooks/sandbox/
+
+# ─── macOS metadata ──────────────────────────────────────────────────────────
+.AppleDouble
+.LSOverride
+Icon?
