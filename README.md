@@ -70,10 +70,14 @@ Sandbox / scratch notebooks live in `notebooks/sandbox/`.
 - **Trade-off discovered:** threshold-based metrics favour `JointCV` (sharp
   decisions via inner-CV-selected $\alpha$); ranking metrics favour `Ensemble`
   (smoother probabilities via $\alpha$-grid averaging).
-- **Instance Space Analysis** (notebook §9): the meta-feature
-  `minority_nbr_purity` correlates with the FairRank advantage at $\rho=+0.92$
-  ($p<0.01$) — empirical confirmation that the structural bias predicted by
-  the Poisson derivation appears precisely where theory says it should.
+- **Instance Space Analysis** (notebook §9.4): two KNN-graph structural
+  meta-features correlate strongly and *in the theoretically predicted direction*
+  with the FairRank advantage $\Delta\text{G-Mean} = \text{JointCV} - \text{KNNOptK}$:
+  `borderline_fraction` $\rho = +0.77$ ($p<10^{-4}$) and
+  `minority_nbr_purity` $\rho = -0.76$ ($p<10^{-4}$).
+  FairRank helps most where minorities sit on the class boundary and least where
+  they already form pure clusters — direct empirical confirmation of the
+  structural-bias mechanism predicted by the Poisson derivation in §2.
 
 ---
 
@@ -186,15 +190,25 @@ This allows every estimator to be plugged directly into `run_benchmark()`.
 
 ## Known limitations
 
-**Categorical NaN encoding.** Six datasets contain NaN values in categorical
+**Categorical NaN imputation.** Six datasets contain NaN values in categorical
 feature columns (`dataset_1000_hypothyroid`, `dataset_38_sick`,
 `dataset_1002_ipums_la_98-small`, `dataset_1018_ipums_la_99-small`,
-`dataset_1023_soybean`, `dataset_968_analcatdata_birthday`). These are passed
-directly to `OneHotEncoder`, which encodes NaN as a spurious extra category
-rather than imputing it. Numerical NaN values are correctly imputed with
-column medians. Since all algorithms see the same feature matrix,
-cross-algorithm comparisons on these datasets remain fair, but their absolute
-performance figures should be interpreted with this in mind.
+`dataset_1023_soybean`, `dataset_968_analcatdata_birthday`). Inside each
+training fold they are imputed with the most-frequent value of that column
+**before** `OneHotEncoder` is fitted (see `src/evaluation/benchmarking.py`,
+lines 102-107). The imputer and encoder are both fit on the training split
+only and `transform`-ed on the test split, so there is no leakage. The residual
+limitation is that most-frequent imputation collapses systematic missingness
+patterns into the modal category — if NaN was itself informative, that signal
+is lost. Numerical NaN values are imputed with training-fold column medians
+following the same train-only protocol.
+
+**Zero-feature datasets after preprocessing.** Three datasets
+(`dataset_1023_soybean`, `dataset_867_visualizing_livestock`,
+`dataset_875_analcatdata_chlamydia`) have all-categorical raw inputs with no
+numerical columns, leaving `X.shape[1] = 0` before the categorical encoding
+step. These are silently skipped by the meta-feature loops in §2.3 and §9.1
+of the notebook (`continue` guards on `X.shape[1] == 0`).
 
 **Degenerate datasets.** Nine datasets in the suite have fewer than 20
 minority samples (`dataset_1013_analcatdata_challenger`,
