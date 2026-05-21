@@ -24,8 +24,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
+from sklearn.impute import SimpleImputer
 from sklearn.model_selection import RepeatedStratifiedKFold
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from src.data.loader import Dataset
 from src.data.preprocessing import binarise_labels, remove_constant_features
@@ -75,23 +76,44 @@ def _run_dataset(
     if not algs_to_run:
         return []
 
-    X = remove_constant_features(ds.X)
+    X_num = remove_constant_features(ds.X)
     y = binarise_labels(ds.y)
     rows = []
 
-    for repeat_fold_idx, (train_idx, test_idx) in enumerate(cv.split(X, y)):
+    # cv.split only needs row count; supply a dummy column when X_num is empty
+    _split_X = X_num if X_num.shape[1] > 0 else np.zeros((len(y), 1))
+    for repeat_fold_idx, (train_idx, test_idx) in enumerate(cv.split(_split_X, y)):
         fold = repeat_fold_idx % cv_folds
         repeat = repeat_fold_idx // cv_folds
 
-        X_train, X_test = X[train_idx].copy(), X[test_idx].copy()
+        X_num_tr, X_num_te = X_num[train_idx].copy(), X_num[test_idx].copy()
         y_train, y_test = y[train_idx], y[test_idx]
 
-        if np.isnan(X_train).any() or np.isnan(X_test).any():
-            col_medians = np.nanmedian(X_train, axis=0)
-            nan_train = np.isnan(X_train)
-            nan_test = np.isnan(X_test)
-            X_train[nan_train] = np.take(col_medians, np.where(nan_train)[1])
-            X_test[nan_test] = np.take(col_medians, np.where(nan_test)[1])
+        # Numerical NaN: impute with train-fold medians (no leakage)
+        if X_num_tr.shape[1] > 0 and (np.isnan(X_num_tr).any() or np.isnan(X_num_te).any()):
+            col_medians = np.nanmedian(X_num_tr, axis=0)
+            nan_tr = np.isnan(X_num_tr)
+            nan_te = np.isnan(X_num_te)
+            X_num_tr[nan_tr] = np.take(col_medians, np.where(nan_tr)[1])
+            X_num_te[nan_te] = np.take(col_medians, np.where(nan_te)[1])
+
+        # Categorical NaN + OHE: fit entirely on training split (no leakage)
+        if ds.cat_raw is not None:
+            _imp = SimpleImputer(strategy="most_frequent")
+            cat_tr = _imp.fit_transform(ds.cat_raw[train_idx])
+            cat_te = _imp.transform(ds.cat_raw[test_idx])
+            _ohe = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
+            cat_tr_enc = _ohe.fit_transform(cat_tr)
+            cat_te_enc = _ohe.transform(cat_te)
+            if X_num_tr.shape[1] > 0:
+                X_train = np.hstack([X_num_tr, cat_tr_enc])
+                X_test = np.hstack([X_num_te, cat_te_enc])
+            else:
+                X_train = cat_tr_enc
+                X_test = cat_te_enc
+        else:
+            X_train = X_num_tr
+            X_test = X_num_te
 
         scaler = StandardScaler()
         X_train = scaler.fit_transform(X_train)
