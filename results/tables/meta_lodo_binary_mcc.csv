@@ -1,6 +1,6 @@
 meta_learner,lodo_acc,baseline,vs_baseline,n_datasets
 LogisticReg,0.75,0.5,0.25,40
-RandomForest,0.725,0.5,0.22499999999999998,40
+RandomForest,0.75,0.5,0.25,40
 GradientBoosting,0.675,0.5,0.17500000000000004,40
+KNN-5,0.65,0.5,0.15000000000000002,40
 SVM,0.65,0.5,0.15000000000000002,40
-KNN-5,0.625,0.5,0.125,40

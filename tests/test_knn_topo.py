@@ -3,7 +3,11 @@
 import numpy as np
 import pytest
 
-from src.algorithms.knn_adaptive_topo import KNNAdaptiveTopo
+# Skip entire module if persistent-homology dependency (ripser) is unavailable.
+# The topology-based variants are experimental and not in the final benchmark.
+pytest.importorskip("ripser", reason="ripser is an optional dependency for topology-based variants")
+
+from src.algorithms.adaptive_k.knn_adaptive_topo import KNNAdaptiveTopo
 
 
 @pytest.fixture
