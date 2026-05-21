@@ -14,8 +14,20 @@ compare $d_1^{\text{min}}$ against $d_r^{\text{maj}}$ where $r=N_{\text{maj}}/N_
 
 ## Final deliverable
 
-The single executable notebook is **`notebooks/entrega_final.ipynb`**.
-Development notebooks live in `notebooks/sandbox/`.
+The main executable notebook is **`notebooks/entrega_final.ipynb`**.
+
+### Notebook navigator
+
+| Notebook | Role | When to open |
+|---|---|---|
+| `entrega_final.ipynb` | **Main report** — full pipeline, theory, results, statistical validation, discussion | This is the deliverable. Start here. |
+| `meta_analysis.ipynb` | Instance Space Analysis pipeline — PCA, footprints, LODO-CV, stress test, Kendall trend | Open to reproduce the meta-analysis (§9 in main report references it) |
+| `algorithm_documentation.ipynb` | Per-algorithm technical reference (math derivations, complexity, code walk-through) | Open as a companion when reading code in `src/algorithms/` |
+| `phase1_baseline.ipynb` | Phase 1 exploratory analysis (KNNOptK baseline, IR sweep, k-selection) | Open if reviewer asks about Phase 1 checkpoint |
+| `phase2_benchmark.ipynb` | Benchmark execution pipeline (calls `run_benchmark()`, generates `benchmark_5rep.csv`) | Open to re-run the benchmark from scratch |
+| `algorithm_design.ipynb`, `algorithm_reference.ipynb` | Development narrative + earlier reference (legacy) | Historical context only |
+
+Sandbox / scratch notebooks live in `notebooks/sandbox/`.
 
 ---
 

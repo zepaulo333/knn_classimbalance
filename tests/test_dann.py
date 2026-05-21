@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from src.algorithms.dann import DANN
-from src.algorithms.dann_adaptive import DANNAdaptive
+from src.algorithms.baseline.dann import DANN
+from src.algorithms.baseline.dann_adaptive import DANNAdaptive
 
 
 @pytest.fixture

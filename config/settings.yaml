@@ -168,6 +168,17 @@ knn_fair_rank_topo_joint:
 knn_fair_rank_jackknife:
   k_probe: null   # null → uses n_votes (exclude each active vote participant once)
 
+# ── KNN fair-rank multiclass (K-class generalisation of FairRank) ──
+knn_fair_rank_multiclass:
+  n_votes: 5      # max rank-corrected rounds aggregated per query
+  k_buffer: 5     # extra neighbours fetched per class beyond worst-case rank
+  k_floor: 5      # minimum neighbours fetched per class
+  k_cap: 500      # upper bound on neighbours fetched per class
+
+# ── KNN fair-rank multiclass jackknife (LOO over nearest training points) ──
+knn_fair_rank_multiclass_jackknife:
+  k_probe: null   # null → full LOO over all training points (recommended for small datasets)
+
 # ── KNN fair-rank local odds (rank-native per-query k_eff) ──
 knn_fair_rank_local_odds:
   k_probe: null    # null → uses k_min (all fetched minority distances contribute)

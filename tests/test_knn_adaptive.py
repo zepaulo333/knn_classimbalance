@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from src.algorithms.knn_adaptive_entropy import KNNAdaptiveEntropy
-from src.algorithms.knn_adaptive_eigen import KNNAdaptiveEigen
+from src.algorithms.adaptive_k.knn_adaptive_entropy import KNNAdaptiveEntropy
+from src.algorithms.adaptive_k.knn_adaptive_eigen import KNNAdaptiveEigen
 
 
 @pytest.fixture

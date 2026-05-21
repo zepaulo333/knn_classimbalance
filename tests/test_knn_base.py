@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from src.algorithms.knn_base import KNNClassifier
+from src.algorithms.baseline.knn_base import KNNClassifier
 
 
 @pytest.fixture
