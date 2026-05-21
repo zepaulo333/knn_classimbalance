@@ -1,4 +1,7 @@
 Metric,Value,Baseline,n
-10-way LODO-CV accuracy (non-tied),25.0%,~50% (random on non-tied),7
-Binary LODO-CV accuracy (FairRank vs KNNOptK),82.5%,85.0% (majority class),40
-FairRank win rate overall,85.0%,50%,40
+"10-way LODO (G-Mean, best: LogisticReg)",15.0%,17.5% (majority class),40
+"Binary LODO (G-Mean: KNNFairRankJointCV vs KNNFairRankOptVotes, best: RandomForest)",67.5%,52.5% (majority class),40
+"10-way LODO (MCC, best: RandomForest)",57.5%,42.5% (majority class),40
+"Binary LODO (MCC: KNNFairRankEnsemble vs KNNFairRankJointCV, best: LogisticReg)",75.0%,50.0% (majority class),40
+"10-way LODO (PR-AUC, best: RandomForest)",75.0%,52.5% (majority class),40
+"Binary LODO (PR-AUC: KNNFairRankEnsemble vs KNNWeighted, best: GradientBoosting)",92.5%,52.5% (majority class),40
