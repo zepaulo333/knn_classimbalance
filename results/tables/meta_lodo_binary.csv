@@ -16,7 +16,7 @@ dataset_1061_ar4,1,1,True
 dataset_1065_kc3,1,1,True
 dataset_311_oil_spill,1,1,True
 dataset_312_scene,1,1,True
-dataset_316_yeast_ml8,1,0,False
+dataset_316_yeast_ml8,1,1,True
 dataset_38_sick,1,1,True
 dataset_463_backache,1,1,True
 dataset_757_meta,1,1,True
