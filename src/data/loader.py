@@ -17,8 +17,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OneHotEncoder
 
 from src.utils.config import get_project_root, load_config
 
@@ -33,9 +31,10 @@ _TARGET_ALIASES = {
 @dataclass
 class Dataset:
     name: str
-    X: np.ndarray
+    X: np.ndarray           # numerical features only (may contain NaN)
     y: np.ndarray
     imbalance_ratio: float  # minority_count / majority_count
+    cat_raw: np.ndarray | None = None  # raw categorical features, object dtype (may contain NaN)
 
 
 def load_all_datasets() -> list[Dataset]:
@@ -107,19 +106,11 @@ def _load_single(
     num_df = features_df.select_dtypes(include=[np.number])
     cat_df = features_df.select_dtypes(exclude=[np.number])
 
-    parts = []
-    if num_df.shape[1] > 0:
-        parts.append(num_df.values.astype(float))
-    if cat_df.shape[1] > 0:
-        imp = SimpleImputer(strategy="most_frequent")
-        cat_clean = imp.fit_transform(cat_df.values)
-        enc = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
-        parts.append(enc.fit_transform(cat_clean))
+    X_num = num_df.values.astype(float) if num_df.shape[1] > 0 else np.empty((len(df), 0), dtype=float)
+    cat_raw = cat_df.values if cat_df.shape[1] > 0 else None
 
-    if not parts:
+    if X_num.shape[1] == 0 and cat_raw is None:
         return None
-
-    X = np.hstack(parts) if len(parts) > 1 else parts[0]
 
     # Compute imbalance ratio
     classes, counts = np.unique(pd.factorize(y_raw)[0], return_counts=True)
@@ -130,7 +121,8 @@ def _load_single(
 
     return Dataset(
         name=path.stem,
-        X=X.astype(float),
+        X=X_num,
         y=y_raw,
         imbalance_ratio=ratio,
+        cat_raw=cat_raw,
     )
