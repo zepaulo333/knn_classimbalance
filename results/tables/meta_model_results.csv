@@ -1,0 +1,4 @@
+Metric,Value,Baseline,n
+10-way LODO-CV accuracy (non-tied),25.0%,~50% (random on non-tied),7
+Binary LODO-CV accuracy (FairRank vs KNNOptK),82.5%,85.0% (majority class),40
+FairRank win rate overall,85.0%,50%,40
