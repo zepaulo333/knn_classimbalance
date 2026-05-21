@@ -17,6 +17,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder
 
 from src.utils.config import get_project_root, load_config
@@ -108,23 +109,12 @@ def _load_single(
 
     parts = []
     if num_df.shape[1] > 0:
-        X_num = num_df.values.astype(float)
-        if np.isnan(X_num).any():
-            col_medians = np.nanmedian(X_num, axis=0)
-            nan_mask = np.isnan(X_num)
-            X_num[nan_mask] = np.take(col_medians, np.where(nan_mask)[1])
-        parts.append(X_num)
+        parts.append(num_df.values.astype(float))
     if cat_df.shape[1] > 0:
-        # Known limitation: NaN values in categorical columns are not imputed.
-        # OneHotEncoder receives them as the string "nan", producing a spurious
-        # extra category per affected column. Six datasets are affected:
-        # dataset_1000_hypothyroid, dataset_38_sick, dataset_1002_ipums_la_98-small,
-        # dataset_1018_ipums_la_99-small, dataset_1023_soybean,
-        # dataset_968_analcatdata_birthday.
-        # All algorithms see the same feature matrix, so comparisons remain fair,
-        # but absolute performance on these datasets may differ from a clean imputation.
+        imp = SimpleImputer(strategy="most_frequent")
+        cat_clean = imp.fit_transform(cat_df.values)
         enc = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
-        parts.append(enc.fit_transform(cat_df.values))
+        parts.append(enc.fit_transform(cat_clean))
 
     if not parts:
         return None

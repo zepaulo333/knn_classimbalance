@@ -83,8 +83,15 @@ def _run_dataset(
         fold = repeat_fold_idx % cv_folds
         repeat = repeat_fold_idx // cv_folds
 
-        X_train, X_test = X[train_idx], X[test_idx]
+        X_train, X_test = X[train_idx].copy(), X[test_idx].copy()
         y_train, y_test = y[train_idx], y[test_idx]
+
+        if np.isnan(X_train).any() or np.isnan(X_test).any():
+            col_medians = np.nanmedian(X_train, axis=0)
+            nan_train = np.isnan(X_train)
+            nan_test = np.isnan(X_test)
+            X_train[nan_train] = np.take(col_medians, np.where(nan_train)[1])
+            X_test[nan_test] = np.take(col_medians, np.where(nan_test)[1])
 
         scaler = StandardScaler()
         X_train = scaler.fit_transform(X_train)
