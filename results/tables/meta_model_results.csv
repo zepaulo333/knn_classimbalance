@@ -1,7 +1,7 @@
 Metric,Value,Baseline,n
-"10-way LODO (G-Mean, best: LogisticReg)",15.0%,17.5% (majority class),40
-"Binary LODO (G-Mean: KNNFairRankJointCV vs KNNFairRankOptVotes, best: RandomForest)",67.5%,52.5% (majority class),40
-"10-way LODO (MCC, best: RandomForest)",57.5%,42.5% (majority class),40
-"Binary LODO (MCC: KNNFairRankEnsemble vs KNNFairRankJointCV, best: LogisticReg)",75.0%,50.0% (majority class),40
-"10-way LODO (PR-AUC, best: RandomForest)",75.0%,52.5% (majority class),40
-"Binary LODO (PR-AUC: KNNFairRankEnsemble vs KNNWeighted, best: GradientBoosting)",92.5%,52.5% (majority class),40
+"10-way LODO (G-Mean, best: LogisticReg)",23.7%,26.3% (majority class),40
+"Binary LODO (G-Mean: KNNFairRankJointCV vs KNNFairRankOptVotes, best: LogisticReg)",73.7%,57.5% (majority class),40
+"10-way LODO (MCC, best: RandomForest)",39.5%,36.8% (majority class),40
+"Binary LODO (MCC: KNNFairRankEnsemble vs KNNFairRankJointCV, best: GradientBoosting)",73.7%,55.0% (majority class),40
+"10-way LODO (PR-AUC, best: SVM)",68.4%,47.4% (majority class),40
+"Binary LODO (PR-AUC: KNNFairRankEnsemble vs KNNWeighted, best: KNN-5)",86.8%,52.5% (majority class),40
