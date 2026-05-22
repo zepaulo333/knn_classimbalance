@@ -86,24 +86,30 @@ def _run_dataset(
         fold = repeat_fold_idx % cv_folds
         repeat = repeat_fold_idx // cv_folds
 
+        # ── Leakage boundary: everything below sees only the training rows ──────
+        # train_idx / test_idx are disjoint row indices produced by cv.split.
+        # All preprocessing is fitted exclusively on the training split and then
+        # applied (transform-only) to the test split, so no test information
+        # ever influences the fitted parameters.
         X_num_tr, X_num_te = X_num_full[train_idx].copy(), X_num_full[test_idx].copy()
         y_train, y_test = y[train_idx], y[test_idx]
 
-        # Numerical NaN: impute with train-fold medians (no leakage)
+        # NaN imputation: median computed from X_num_tr (train) only,
+        # then used to fill missing values in both splits.
         if X_num_tr.shape[1] > 0 and (np.isnan(X_num_tr).any() or np.isnan(X_num_te).any()):
-            col_medians = np.nanmedian(X_num_tr, axis=0)
+            col_medians = np.nanmedian(X_num_tr, axis=0)  # fit on train
             nan_tr = np.isnan(X_num_tr)
             nan_te = np.isnan(X_num_te)
-            X_num_tr[nan_tr] = np.take(col_medians, np.where(nan_tr)[1])
-            X_num_te[nan_te] = np.take(col_medians, np.where(nan_te)[1])
+            X_num_tr[nan_tr] = np.take(col_medians, np.where(nan_tr)[1])  # apply to train
+            X_num_te[nan_te] = np.take(col_medians, np.where(nan_te)[1])  # apply to test
 
-        # Drop features that are constant in the training fold (mask fitted on
-        # train only — test never influences which features are kept).
+        # Constant-feature mask: std computed from X_num_tr (train) only.
+        # The same column mask is then applied to both splits so they stay aligned.
         if X_num_tr.shape[1] > 0:
-            _num_std = np.nanstd(X_num_tr, axis=0)
+            _num_std = np.nanstd(X_num_tr, axis=0)  # fit on train
             _num_mask = np.isfinite(_num_std) & (_num_std > 0)
-            X_num_tr = X_num_tr[:, _num_mask]
-            X_num_te = X_num_te[:, _num_mask]
+            X_num_tr = X_num_tr[:, _num_mask]   # apply to train
+            X_num_te = X_num_te[:, _num_mask]   # apply to test
 
         # Categorical NaN + OHE: fit entirely on training split (no leakage).
         # Two deliberate behaviours to be aware of:
@@ -119,11 +125,11 @@ def _run_dataset(
         #       distinct, neutral encoding.
         if ds.cat_raw is not None:
             _imp = SimpleImputer(strategy="most_frequent")
-            cat_tr = _imp.fit_transform(ds.cat_raw[train_idx])
-            cat_te = _imp.transform(ds.cat_raw[test_idx])
+            cat_tr = _imp.fit_transform(ds.cat_raw[train_idx])  # fit+apply on train
+            cat_te = _imp.transform(ds.cat_raw[test_idx])       # apply to test
             _ohe = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
-            cat_tr_enc = _ohe.fit_transform(cat_tr)
-            cat_te_enc = _ohe.transform(cat_te)
+            cat_tr_enc = _ohe.fit_transform(cat_tr)  # fit+apply on train
+            cat_te_enc = _ohe.transform(cat_te)      # apply to test
             if X_num_tr.shape[1] > 0:
                 X_train = np.hstack([X_num_tr, cat_tr_enc])
                 X_test = np.hstack([X_num_te, cat_te_enc])
@@ -134,9 +140,10 @@ def _run_dataset(
             X_train = X_num_tr
             X_test = X_num_te
 
+        # Scaling: mean and std computed from X_train (train) only.
         scaler = StandardScaler()
-        X_train = scaler.fit_transform(X_train)
-        X_test = scaler.transform(X_test)
+        X_train = scaler.fit_transform(X_train)  # fit+apply on train
+        X_test = scaler.transform(X_test)        # apply to test
 
         for alg_name, EstimatorClass in algs_to_run.items():
             row_base = {
@@ -148,8 +155,8 @@ def _run_dataset(
             }
             try:
                 estimator = EstimatorClass()
-                estimator.fit(X_train, y_train)
-                y_pred = estimator.predict(X_test)
+                estimator.fit(X_train, y_train)        # trained on train split only
+                y_pred = estimator.predict(X_test)     # evaluated on held-out test split
 
                 y_proba = None
                 if hasattr(estimator, "predict_proba"):
@@ -157,7 +164,7 @@ def _run_dataset(
                     if proba.ndim == 2 and proba.shape[1] >= 2:
                         y_proba = proba[:, 1]
 
-                metrics = compute_all_metrics(y_test, y_pred, y_proba)
+                metrics = compute_all_metrics(y_test, y_pred, y_proba)  # y_test never seen by model
                 rows.append({**row_base, **metrics})
 
             except Exception:
