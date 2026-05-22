@@ -1,0 +1,1925 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KNNFairRankJointCV — Interactive Illustration</title>
+<meta name="description" content="Interactive visualisation of the KNNFairRankJointCV algorithm: drag the query, change imbalance, watch inner CV unfold.">
+
+<!-- KaTeX (CDN with graceful Unicode fallback if offline) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
+
+<style>
+  /* ─── Palette (U.Porto) ────────────────────────────────────────────── */
+  :root {
+    --navy:    #003D7A;
+    --blue:    #0d6efd;
+    --pale:    #E7F0FA;
+    --light:   #F8F9FA;
+    --gray:    #6C757D;
+    --darkgray:#404653;
+    --dark:    #212939;
+    --white:   #FFFFFF;
+    --green:   #10824D;
+    --red:     #C0392B;
+    --amber:   #D98216;
+    --shadow:  0 2px 12px rgba(0,61,122,0.08);
+    --shadowL: 0 4px 20px rgba(0,61,122,0.14);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Calibri,
+                 Tahoma, Geneva, Verdana, sans-serif;
+    color: var(--dark);
+    background: var(--white);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ─── Header ─────────────────────────────────────────────────────── */
+  header {
+    background: var(--navy);
+    color: var(--white);
+    padding: 36px 48px 28px;
+    border-bottom: 4px solid var(--blue);
+    position: relative;
+  }
+  header .kicker {
+    font-size: 12px;
+    letter-spacing: 1.5px;
+    font-weight: 700;
+    color: var(--pale);
+    opacity: 0.85;
+  }
+  header h1 {
+    font-size: 38px;
+    margin: 6px 0 4px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+  header .subtitle {
+    font-size: 16px;
+    color: var(--pale);
+    margin: 0 0 18px;
+    font-style: italic;
+    max-width: 900px;
+  }
+  header .header-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  header .header-actions .label {
+    font-size: 11px;
+    color: var(--pale);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.7;
+    margin-right: 4px;
+  }
+
+  /* ─── Layout ─────────────────────────────────────────────────────── */
+  main {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 40px 32px 80px;
+  }
+  section {
+    margin-bottom: 56px;
+    scroll-margin-top: 24px;
+  }
+  section h2 {
+    color: var(--navy);
+    font-size: 26px;
+    margin: 0 0 6px;
+    font-weight: 700;
+  }
+  section h2 .num {
+    display: inline-block;
+    background: var(--navy);
+    color: var(--white);
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 36px;
+    font-size: 18px;
+    margin-right: 12px;
+    vertical-align: middle;
+  }
+  section .lead {
+    color: var(--gray);
+    font-size: 15px;
+    margin: 0 0 22px;
+    max-width: 900px;
+  }
+  .lead .hint {
+    background: var(--pale);
+    color: var(--navy);
+    padding: 2px 7px;
+    border-radius: 3px;
+    font-weight: 600;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  /* ─── Panels ─────────────────────────────────────────────────────── */
+  .panel {
+    background: var(--light);
+    border-radius: 8px;
+    padding: 24px 28px;
+    box-shadow: var(--shadow);
+    border-left: 4px solid var(--blue);
+  }
+  .panel.navy  { border-left-color: var(--navy); }
+  .panel.green { border-left-color: var(--green); }
+  .panel.amber { border-left-color: var(--amber); }
+  .panel.red   { border-left-color: var(--red); }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 28px;
+    align-items: start;
+  }
+  .grid-2.split {
+    grid-template-columns: 1fr 1fr;
+  }
+  .grid-side h3 {
+    color: var(--navy);
+    margin: 0 0 8px;
+    font-size: 17px;
+  }
+  .grid-side p {
+    color: var(--dark);
+    font-size: 14px;
+    margin: 0 0 14px;
+  }
+
+  /* ─── Controls ──────────────────────────────────────────────────── */
+  .control { margin-bottom: 18px; }
+  .control-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+  }
+  .control-label .name {
+    font-size: 12px;
+    color: var(--gray);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    font-weight: 600;
+  }
+  .control-label .value {
+    font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--navy);
+    background: var(--pale);
+    padding: 2px 9px;
+    border-radius: 4px;
+  }
+  input[type=range] {
+    width: 100%;
+    accent-color: var(--blue);
+    cursor: pointer;
+    height: 24px;
+  }
+  input[type=range]:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 4px;
+  }
+
+  /* ─── Formula box ──────────────────────────────────────────────── */
+  .formula {
+    background: var(--pale);
+    padding: 14px 18px;
+    border-radius: 6px;
+    text-align: center;
+    font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
+    font-size: 16px;
+    color: var(--navy);
+    font-weight: 600;
+    margin: 14px 0;
+  }
+  .formula .katex { font-size: 1.1em !important; }
+  .formula .num {
+    color: var(--dark);
+    font-weight: 700;
+  }
+  .formula .small {
+    font-size: 13px;
+    color: var(--gray);
+    font-weight: 400;
+    font-style: italic;
+    margin-top: 6px;
+  }
+
+  /* ─── SVG plot containers ───────────────────────────────────────── */
+  .plot-wrap {
+    background: var(--white);
+    border-radius: 6px;
+    border: 1px solid #e5e7ea;
+    padding: 12px;
+    position: relative;
+  }
+  .plot-wrap svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .plot-wrap.compare {
+    border-color: var(--blue);
+  }
+  .plot-wrap .plot-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--navy);
+    text-align: center;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+  .plot-wrap .plot-title.left { color: var(--gray); }
+  .plot-wrap .plot-title.right { color: var(--navy); }
+  .plot-caption {
+    text-align: center;
+    font-size: 12px;
+    color: var(--gray);
+    font-style: italic;
+    margin-top: 6px;
+  }
+
+  /* Animated SVG elements (line transitions when state changes) */
+  svg .anim-line { transition: x2 0.25s ease, y2 0.25s ease, stroke 0.2s, stroke-opacity 0.2s; }
+  svg .anim-dot  { transition: r 0.2s ease, stroke-width 0.2s ease; }
+  svg .query-dot {
+    cursor: grab;
+    transition: r 0.15s ease;
+  }
+  svg .query-dot:active { cursor: grabbing; }
+  svg .query-dot.dragging { r: 11; }
+  svg .query-hint {
+    pointer-events: none;
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.35; }
+    50%      { opacity: 0.9; }
+  }
+  /* Tooltip */
+  .tooltip {
+    position: fixed;
+    background: var(--dark);
+    color: var(--white);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+    white-space: nowrap;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+  }
+  .tooltip.show { opacity: 0.95; }
+
+  /* ─── Vote tally ──────────────────────────────────────────────── */
+  .votes {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 14px;
+  }
+  .vote-row {
+    display: grid;
+    grid-template-columns: 36px 1fr 88px 70px;
+    gap: 10px;
+    align-items: center;
+    font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
+    font-size: 12.5px;
+    padding: 6px 10px;
+    background: var(--white);
+    border-radius: 4px;
+    border-left: 3px solid #ccc;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+  }
+  .vote-row:hover { background: var(--pale); transform: translateX(2px); }
+  .vote-row.minority { border-left-color: var(--red); }
+  .vote-row.majority { border-left-color: var(--blue); }
+  .vote-row .idx { color: var(--gray); font-weight: 600; }
+  .vote-row .comparison { color: var(--dark); }
+  .vote-row .winner { font-weight: 700; }
+  .vote-row .winner.min { color: var(--red); }
+  .vote-row .winner.maj { color: var(--blue); }
+  .vote-row .strength {
+    font-size: 11px;
+    color: var(--gray);
+    text-align: right;
+  }
+
+  /* ─── Decision callout ────────────────────────────────────────── */
+  .decision {
+    margin-top: 16px;
+    padding: 16px 20px;
+    border-radius: 6px;
+    background: var(--navy);
+    color: var(--white);
+    text-align: center;
+    font-weight: 700;
+    transition: background 0.4s, transform 0.2s;
+  }
+  .decision .label {
+    font-size: 11px;
+    color: var(--pale);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 600;
+  }
+  .decision .value {
+    font-size: 22px;
+    margin-top: 4px;
+  }
+  .decision.minority { background: var(--red); }
+  .decision.majority { background: var(--darkgray); }
+  .decision.flipped { animation: flip 0.6s ease; }
+  @keyframes flip {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.04); }
+    100% { transform: scale(1); }
+  }
+
+  /* ─── Split-view comparison row ──────────────────────────────── */
+  .compare-result {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 12px;
+  }
+  .compare-result .item {
+    padding: 12px 16px;
+    border-radius: 6px;
+    text-align: center;
+    background: var(--white);
+  }
+  .compare-result .item.standard { border-top: 4px solid var(--gray); }
+  .compare-result .item.fair { border-top: 4px solid var(--navy); }
+  .compare-result .item .alg {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--gray);
+    letter-spacing: 0.5px;
+    font-weight: 600;
+  }
+  .compare-result .item .pred {
+    font-size: 22px;
+    font-weight: 700;
+    margin-top: 4px;
+  }
+  .compare-result .item.standard .pred { color: var(--blue); }
+  .compare-result .item.fair .pred { color: var(--navy); }
+  .compare-result .item .pred.minority { color: var(--red); }
+
+  /* ─── CV grid (Section 4) ──────────────────────────────────── */
+  .cv-grid-wrap {
+    display: grid;
+    grid-template-columns: 80px repeat(6, 1fr);
+    gap: 4px;
+    margin: 16px 0;
+  }
+  .cv-cell {
+    aspect-ratio: 1.4 / 1;
+    border-radius: 4px;
+    background: var(--white);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
+    font-size: 13px;
+    color: var(--dark);
+    border: 1px solid #e5e7ea;
+    transition: all 0.4s ease;
+    cursor: pointer;
+    position: relative;
+  }
+  .cv-cell.header, .cv-cell.rowhead {
+    background: var(--navy);
+    color: var(--white);
+    font-weight: 600;
+    border-color: var(--navy);
+    cursor: default;
+    font-size: 12px;
+  }
+  .cv-cell.evaluating {
+    background: var(--pale);
+    border-color: var(--blue);
+    animation: pulseLight 0.8s ease infinite;
+  }
+  @keyframes pulseLight {
+    0%, 100% { background: var(--pale); }
+    50%      { background: #d0e1f6; }
+  }
+  .cv-cell.filled { background: var(--pale); border-color: var(--blue); }
+  .cv-cell.best {
+    background: var(--navy);
+    color: var(--white);
+    border-color: var(--navy);
+    font-weight: 700;
+    transform: scale(1.06);
+    box-shadow: var(--shadowL);
+  }
+  .cv-cell .fold-progress {
+    display: flex;
+    gap: 2px;
+    margin-top: 4px;
+    height: 4px;
+  }
+  .cv-cell .fold-dot {
+    width: 8px;
+    height: 4px;
+    background: #d0d4d8;
+    border-radius: 2px;
+    transition: background 0.2s;
+  }
+  .cv-cell .fold-dot.done { background: var(--blue); }
+  .cv-cell.best .fold-dot.done { background: var(--white); }
+
+  /* Fold visualisation panel */
+  .fold-viz {
+    background: var(--white);
+    border-radius: 6px;
+    border: 1px solid #e5e7ea;
+    padding: 12px;
+    margin-top: 14px;
+  }
+  .fold-viz .fold-label {
+    font-size: 11px;
+    color: var(--gray);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .fold-viz .fold-bar {
+    display: flex;
+    height: 24px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #e5e7ea;
+  }
+  .fold-viz .fold-segment {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--white);
+    font-size: 11px;
+    font-weight: 700;
+    transition: background 0.3s, opacity 0.3s;
+  }
+  .fold-viz .fold-segment.train { background: var(--blue); }
+  .fold-viz .fold-segment.val   { background: var(--navy); }
+  .fold-viz .fold-segment.idle  { background: #d0d4d8; color: var(--gray); }
+
+  /* ─── Pipeline ────────────────────────────────────────────── */
+  .pipeline {
+    display: grid;
+    grid-template-columns: 1fr 30px 1fr 30px 1fr 30px 1fr;
+    align-items: center;
+    gap: 0;
+    margin: 24px 0;
+  }
+  .pipe-box {
+    background: var(--white);
+    padding: 18px 16px;
+    border-radius: 6px;
+    border-top: 4px solid var(--navy);
+    text-align: center;
+    box-shadow: var(--shadow);
+  }
+  .pipe-box .step {
+    font-size: 11px;
+    color: var(--gray);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .pipe-box .title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--navy);
+    margin-bottom: 6px;
+  }
+  .pipe-box .detail {
+    font-size: 12px;
+    color: var(--gray);
+    font-style: italic;
+  }
+  .pipe-arrow {
+    text-align: center;
+    color: var(--navy);
+    font-size: 22px;
+    font-weight: 700;
+  }
+
+  /* ─── Stats ────────────────────────────────────────────────── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-top: 12px;
+  }
+  .stat {
+    background: var(--white);
+    padding: 12px 14px;
+    border-radius: 6px;
+    text-align: center;
+    border-left: 3px solid var(--navy);
+  }
+  .stat .label {
+    font-size: 11px;
+    color: var(--gray);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+  }
+  .stat .value {
+    font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--navy);
+    margin-top: 4px;
+    transition: color 0.3s;
+  }
+
+  /* ─── Footer ───────────────────────────────────────────────── */
+  footer {
+    background: var(--navy);
+    color: var(--pale);
+    padding: 28px 48px;
+    font-size: 13px;
+    text-align: center;
+    border-top: 4px solid var(--blue);
+  }
+  footer strong { color: var(--white); }
+  footer a { color: var(--blue); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  /* ─── Buttons ─────────────────────────────────────────────── */
+  button {
+    background: var(--navy);
+    color: var(--white);
+    border: none;
+    padding: 10px 22px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    font-family: inherit;
+  }
+  button:hover { background: var(--blue); }
+  button:active { transform: translateY(1px); }
+  button.outline {
+    background: transparent;
+    color: var(--white);
+    border: 2px solid var(--pale);
+    padding: 8px 18px;
+  }
+  button.outline:hover { background: var(--pale); color: var(--navy); border-color: var(--pale); }
+  button.preset {
+    background: transparent;
+    color: var(--pale);
+    border: 1px solid rgba(231, 240, 250, 0.4);
+    padding: 6px 14px;
+    font-size: 11px;
+  }
+  button.preset:hover { background: var(--pale); color: var(--navy); }
+  button.preset.active { background: var(--pale); color: var(--navy); border-color: var(--pale); }
+
+  button.solid-light {
+    background: var(--navy);
+    color: var(--white);
+    border: 1px solid var(--navy);
+  }
+  button.solid-light:hover { background: var(--blue); border-color: var(--blue); }
+
+  /* ─── Tour overlay (when playing) ─────────────────────────── */
+  body.touring section { transition: opacity 0.4s, transform 0.4s; }
+  body.touring section.focus {
+    transform: scale(1.0);
+  }
+  body.touring section:not(.focus) {
+    opacity: 0.35;
+  }
+  .tour-banner {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--navy);
+    color: var(--white);
+    padding: 12px 24px;
+    border-radius: 24px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+    z-index: 999;
+    font-size: 13px;
+    font-weight: 600;
+    display: none;
+    align-items: center;
+    gap: 14px;
+  }
+  body.touring .tour-banner { display: flex; }
+  .tour-banner button {
+    padding: 5px 14px;
+    font-size: 11px;
+  }
+
+  /* ─── Responsive ─────────────────────────────────────────── */
+  @media (max-width: 980px) {
+    .grid-2 { grid-template-columns: 1fr; }
+    .grid-2.split { grid-template-columns: 1fr; }
+    .cv-grid-wrap { grid-template-columns: 60px repeat(6, 1fr); }
+    .pipeline { grid-template-columns: 1fr; gap: 12px; }
+    .pipe-arrow { transform: rotate(90deg); }
+  }
+  @media (max-width: 600px) {
+    header { padding: 24px 20px 20px; }
+    header h1 { font-size: 28px; }
+    main { padding: 24px 16px 60px; }
+    section { margin-bottom: 40px; }
+    section h2 { font-size: 21px; }
+    .panel { padding: 16px 18px; }
+    .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat .value { font-size: 16px; }
+    .vote-row {
+      grid-template-columns: 28px 1fr 70px;
+      font-size: 11px;
+    }
+    .vote-row .strength { display: none; }
+    .cv-grid-wrap { grid-template-columns: 44px repeat(6, 1fr); gap: 3px; }
+    .cv-cell { font-size: 10px; }
+    .compare-result { grid-template-columns: 1fr; }
+    footer { padding: 20px 16px; }
+    input[type=range] { height: 30px; } /* bigger touch target */
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">INTERACTIVE ILLUSTRATION  ·  CC2008  ·  Machine Learning I</div>
+  <h1>KNNFairRankJointCV</h1>
+  <p class="subtitle">A Poisson-derived rank correction for class imbalance, with joint
+     cross-validation over correction strength (α) and vote count. <strong>Drag the query
+     in any plot</strong>; everything updates live.</p>
+
+  <div class="header-actions">
+    <button id="btn-tour" class="solid-light">▶  Play guided tour</button>
+    <span class="label">Presets:</span>
+    <button class="preset" data-preset="mild">Mild  IR=2</button>
+    <button class="preset active" data-preset="standard">Standard  IR=8</button>
+    <button class="preset" data-preset="severe">Severe  IR=40</button>
+    <button class="preset" data-preset="boundary">Boundary case</button>
+    <span style="flex: 1;"></span>
+    <button id="btn-reset" class="outline">Reset state</button>
+  </div>
+</header>
+
+<main>
+
+<!-- ─────────────────────────────────────────────────────────────────── -->
+<!-- SECTION 1 — Split view: Standard KNN vs FairRank                    -->
+<!-- ─────────────────────────────────────────────────────────────────── -->
+<section id="section-1">
+  <h2><span class="num">1</span> Standard KNN  vs  KNNFairRank — live</h2>
+  <p class="lead">
+    Two views of the <strong>same</strong> data and the <strong>same</strong> query —
+    only the comparison rule differs. <span class="hint">Drag the navy query point</span>
+    across the plots to see when the two classifiers diverge. The standard KNN almost
+    always picks majority because the majority cloud is denser; FairRank corrects for
+    this by comparing rank-1 minority against rank-<em>k<sub>eff</sub></em> majority.
+  </p>
+
+  <div class="panel navy">
+    <div class="grid-2 split">
+      <div>
+        <div class="plot-wrap">
+          <div class="plot-title left">Standard KNN</div>
+          <svg viewBox="0 0 600 360" id="svg-standard"></svg>
+          <div class="plot-caption">Compares  d₁ᵐⁱⁿ  vs  d₁ᵐᵃʲ  (rank 1 on both classes)</div>
+        </div>
+      </div>
+      <div>
+        <div class="plot-wrap compare">
+          <div class="plot-title right">KNNFairRank</div>
+          <svg viewBox="0 0 600 360" id="svg-fair"></svg>
+          <div class="plot-caption">Compares  d₁ᵐⁱⁿ  vs  d<sub>k<sub>eff</sub></sub>ᵐᵃʲ  (rank shifted by r)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="compare-result">
+      <div class="item standard">
+        <div class="alg">Standard KNN says</div>
+        <div class="pred" id="pred-standard">—</div>
+      </div>
+      <div class="item fair">
+        <div class="alg">KNNFairRank says</div>
+        <div class="pred" id="pred-fair">—</div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-top: 22px;">
+      <div>
+        <div class="control">
+          <div class="control-label">
+            <span class="name">Imbalance ratio  r  (varies N_min)</span>
+            <span class="value" id="ir-val">8</span>
+          </div>
+          <input type="range" id="ir-slider" min="2" max="40" value="8"
+                 aria-label="Imbalance ratio">
+        </div>
+      </div>
+      <div>
+        <div class="control">
+          <div class="control-label">
+            <span class="name">α  (only affects FairRank)</span>
+            <span class="value" id="alpha1-val">0.75</span>
+          </div>
+          <input type="range" id="alpha1-slider" min="0" max="100" value="75"
+                 aria-label="Correction strength alpha">
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────── -->
+<!-- SECTION 2 — α controls k_eff                                         -->
+<!-- ─────────────────────────────────────────────────────────────────── -->
+<section id="section-2">
+  <h2><span class="num">2</span> The correction:  <span id="math-keff"></span></h2>
+  <p class="lead">
+    Zoom in on the formula. α scales the majority rank we compare against:
+    <span class="hint">α = 1 → full correction k<sub>eff</sub> = r</span>,
+    <span class="hint">α = 0 → no correction (rank 1)</span>. Empirically the optimal α
+    is usually below 1 because minority clusters violate the homogeneous-Poisson assumption.
+  </p>
+
+  <div class="panel">
+    <div class="grid-2">
+      <div class="plot-wrap">
+        <svg viewBox="0 0 600 360" id="svg-alpha"></svg>
+        <div class="plot-caption">
+          The blue line connects the query to the k<sub>eff</sub>-th nearest majority.
+        </div>
+      </div>
+
+      <div class="grid-side">
+        <div class="control">
+          <div class="control-label">
+            <span class="name">α  (correction strength)</span>
+            <span class="value" id="alpha2-val">0.75</span>
+          </div>
+          <input type="range" id="alpha2-slider" min="0" max="100" value="75"
+                 aria-label="Correction strength alpha section 2">
+        </div>
+
+        <div class="formula">
+          <div id="formula-keff"></div>
+          <div class="small">
+            With r = <span id="alpha-r-current">8</span>:
+            α=1 → k<sub>eff</sub>=<span id="keff-1">8</span>  ·
+            α=0.5 → k<sub>eff</sub>=<span id="keff-half">3</span>  ·
+            α=0 → k<sub>eff</sub>=1
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat" style="border-left-color: var(--red);">
+            <div class="label">d₁ᵐⁱⁿ</div>
+            <div class="value" id="d-min-val" style="color: var(--red);">—</div>
+          </div>
+          <div class="stat" style="border-left-color: var(--blue);">
+            <div class="label">d<sub>kₑff</sub>ᵐᵃʲ</div>
+            <div class="value" id="d-maj-val" style="color: var(--blue);">—</div>
+          </div>
+          <div class="stat" style="border-left-color: var(--navy);">
+            <div class="label">Closer  →  predict</div>
+            <div class="value" id="closer-val">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────── -->
+<!-- SECTION 3 — multi-vote                                               -->
+<!-- ─────────────────────────────────────────────────────────────────── -->
+<section id="section-3">
+  <h2><span class="num">3</span> The multi-vote:  <span id="math-multivote"></span></h2>
+  <p class="lead">
+    A single rank-1 comparison is noisy. KNNFairRank casts
+    <strong>n_votes</strong> rank-corrected comparisons and votes by majority.
+    <span class="hint">Hover a row in the tally</span> to highlight the corresponding
+    pair of points in the plot.
+  </p>
+
+  <div class="panel green">
+    <div class="grid-2">
+      <div class="plot-wrap">
+        <svg viewBox="0 0 600 360" id="svg-vote"></svg>
+        <div class="plot-caption">
+          Each pair of lines is one vote at rank i.  Vote → minority if  d<sub>i</sub>ᵐⁱⁿ &lt; d<sub>i·k<sub>eff</sub></sub>ᵐᵃʲ.
+        </div>
+      </div>
+
+      <div class="grid-side">
+        <div class="control">
+          <div class="control-label">
+            <span class="name">n_votes  (comparisons)</span>
+            <span class="value" id="nv-val">5</span>
+          </div>
+          <input type="range" id="nv-slider" min="1" max="10" value="5"
+                 aria-label="Number of votes">
+        </div>
+
+        <div class="control">
+          <div class="control-label">
+            <span class="name">α  (synced across sections)</span>
+            <span class="value" id="alpha3-val">0.75</span>
+          </div>
+          <input type="range" id="alpha3-slider" min="0" max="100" value="75"
+                 aria-label="Correction strength alpha section 3">
+        </div>
+
+        <div id="vote-tally" class="votes"></div>
+
+        <div id="vote-decision" class="decision">
+          <div class="label">Vote fraction</div>
+          <div class="value" id="decision-text">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────── -->
+<!-- SECTION 4 — joint CV                                                 -->
+<!-- ─────────────────────────────────────────────────────────────────── -->
+<section id="section-4">
+  <h2><span class="num">4</span> Joint CV — pick (α*, n_votes*) from data</h2>
+  <p class="lead">
+    KNNFairRankJointCV does <strong>inner stratified 3-fold cross-validation</strong>
+    over the full grid of <strong>4 α × 6 n_votes = 24 pairs</strong>. For each pair,
+    average G-Mean over 3 folds; commit to the argmax.
+    <span class="hint">Click "Run inner CV"</span> to animate the 72 fold evaluations
+    (24 cells × 3 folds), with the active fold-split shown below.
+  </p>
+
+  <div class="panel amber">
+    <div class="grid-side">
+      <h3>Inner CV grid  —  mean G-Mean over 3 folds</h3>
+
+      <div class="cv-grid-wrap" id="cv-grid"></div>
+
+      <div class="fold-viz" id="fold-viz" style="display: none;">
+        <div class="fold-label" id="fold-current-label">— current fold —</div>
+        <div class="fold-bar" id="fold-bar"></div>
+      </div>
+
+      <div style="display: flex; gap: 12px; margin-top: 16px; align-items: center; flex-wrap: wrap;">
+        <button id="cv-run">Run inner CV</button>
+        <button id="cv-reset" class="solid-light">Reset</button>
+        <div style="flex: 1;"></div>
+        <div id="cv-result" style="font-family: 'SF Mono', monospace; font-size: 13px; color: var(--gray);">
+          Awaiting search…
+        </div>
+      </div>
+
+      <div class="stats-grid" style="margin-top: 18px;">
+        <div class="stat">
+          <div class="label">α* selected</div>
+          <div class="value" id="alpha-star">—</div>
+        </div>
+        <div class="stat">
+          <div class="label">n_votes* selected</div>
+          <div class="value" id="nv-star">—</div>
+        </div>
+        <div class="stat">
+          <div class="label">Best G-Mean</div>
+          <div class="value" id="gmean-star">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────── -->
+<!-- SECTION 5 — Pipeline                                                 -->
+<!-- ─────────────────────────────────────────────────────────────────── -->
+<section id="section-5">
+  <h2><span class="num">5</span> The complete pipeline</h2>
+  <p class="lead">
+    Five stages from training data to a prediction. The efficiency trick: α only
+    affects prediction, not the neighbourhood structure — so we fit once per
+    (fold, n_votes) and sweep all α values cheaply on the same fitted model.
+  </p>
+
+  <div class="pipeline">
+    <div class="pipe-box">
+      <div class="step">Input</div>
+      <div class="title">(X, y), r</div>
+      <div class="detail">imbalance r = N_maj / N_min</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-box">
+      <div class="step">Search</div>
+      <div class="title">24 pairs × 3 folds</div>
+      <div class="detail">α ∈ {0.25, 0.5, 0.75, 1}<br>n_votes ∈ {1, 2, 3, 5, 7, 10}</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-box">
+      <div class="step">Select</div>
+      <div class="title">argmax G-Mean</div>
+      <div class="detail">best (α*, n_votes*) by mean fold score</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-box">
+      <div class="step">Predict</div>
+      <div class="title">multi-vote</div>
+      <div class="detail">d<sub>i</sub>ᵐⁱⁿ &lt; d<sub>i·k<sub>eff</sub></sub>ᵐᵃʲ for i=1..n_votes*</div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top: 28px;">
+    <h3 style="color: var(--navy); margin-top: 0;">Result on the project benchmark</h3>
+    <div class="stats-grid">
+      <div class="stat">
+        <div class="label">G-Mean (40 datasets)</div>
+        <div class="value">0.799</div>
+      </div>
+      <div class="stat">
+        <div class="label">vs KNNOptK · Cohen's d</div>
+        <div class="value" style="color: var(--green);">+0.88</div>
+      </div>
+      <div class="stat">
+        <div class="label">vs KNNOptK · p_holm</div>
+        <div class="value">&lt; 10⁻⁴</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<div class="tour-banner" id="tour-banner">
+  <span id="tour-msg">Tour playing…</span>
+  <button id="tour-stop" class="outline">Stop</button>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<footer>
+  <strong>KNN Variants for Class Imbalance</strong>  ·  Machine Learning I (CC2008)  ·  University of Porto  ·  2025/2026<br>
+  Duarte Gomes (up202409386)  ·  José Sousa (up202405046)  ·  Tiago Sousa (up202405406)
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // ─── Palette mirror (matches CSS) ──────────────────────────────────
+  const PAL = {
+    NAVY:  "#003D7A",
+    BLUE:  "#0d6efd",
+    PALE:  "#E7F0FA",
+    LIGHT: "#F8F9FA",
+    GRAY:  "#6C757D",
+    DARK:  "#212939",
+    WHITE: "#FFFFFF",
+    GREEN: "#10824D",
+    RED:   "#C0392B",
+    AMBER: "#D98216"
+  };
+
+  // ─── State ─────────────────────────────────────────────────────────
+  const W = 600, H = 360;
+  const state = {
+    query: { x: 310, y: 180 },
+    alpha: 0.75,
+    n_votes: 5,
+    IR: 8,                  // integer 2..40, controls N_min
+    seed: 42,
+    minoritySigma: 35,
+    minorityCx: 420,
+    minorityCy: 180,
+    majoritySigma: 65,
+    majorityCx: 200,
+    majorityCy: 180,
+    N_maj: 80,
+    highlightVoteIdx: null
+  };
+
+  const PRESETS = {
+    mild:     { IR: 2,  query: {x: 310, y: 180}, minoritySigma: 70, minorityCx: 400 },
+    standard: { IR: 8,  query: {x: 310, y: 180}, minoritySigma: 35, minorityCx: 420 },
+    severe:   { IR: 40, query: {x: 310, y: 180}, minoritySigma: 25, minorityCx: 430 },
+    boundary: { IR: 8,  query: {x: 310, y: 180}, minoritySigma: 35, minorityCx: 420 }
+  };
+
+  // ─── PRNG + data generation ────────────────────────────────────────
+  function mulberry32(seed) {
+    return function () {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function gaussian(rng, mean, std) {
+    const u = 1 - rng(); const v = 1 - rng();
+    return mean + std * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  // Majority is fixed (regen only on preset change); minority regenerates on IR change.
+  let majority = [];
+  let minority = [];
+
+  function regenerateMajority() {
+    const rng = mulberry32(state.seed);
+    majority = [];
+    for (let i = 0; i < state.N_maj; i++) {
+      majority.push({
+        x: gaussian(rng, state.majorityCx, state.majoritySigma),
+        y: gaussian(rng, state.majorityCy, state.majoritySigma)
+      });
+    }
+  }
+  function regenerateMinority() {
+    const rng = mulberry32(state.seed + 1);
+    minority = [];
+    const N_min = Math.max(2, Math.round(state.N_maj / state.IR));
+    for (let i = 0; i < N_min; i++) {
+      minority.push({
+        x: gaussian(rng, state.minorityCx, state.minoritySigma),
+        y: gaussian(rng, state.minorityCy, state.minoritySigma)
+      });
+    }
+  }
+  regenerateMajority();
+  regenerateMinority();
+
+  // ─── Distance helpers ──────────────────────────────────────────────
+  function dist(a, b) {
+    const dx = a.x - b.x, dy = a.y - b.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+  function sortedDistances() {
+    const dMaj = majority.map((p, i) => ({ ...p, d: dist(p, state.query), origIdx: i }))
+                          .sort((a, b) => a.d - b.d);
+    const dMin = minority.map((p, i) => ({ ...p, d: dist(p, state.query), origIdx: i }))
+                          .sort((a, b) => a.d - b.d);
+    return { dMaj, dMin };
+  }
+
+  function calcKeff(alpha, r) {
+    return Math.max(1, Math.round(Math.pow(r, alpha)));
+  }
+
+  // ─── SVG helpers ──────────────────────────────────────────────────
+  const SVGNS = "http://www.w3.org/2000/svg";
+  function svgEl(name, attrs) {
+    const el = document.createElementNS(SVGNS, name);
+    if (attrs) for (const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+  function clearSvg(svg) {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+  }
+
+  // Tooltip (single global element)
+  const tooltipEl = document.getElementById("tooltip");
+  function showTooltip(text, x, y) {
+    tooltipEl.textContent = text;
+    tooltipEl.style.left = (x + 12) + "px";
+    tooltipEl.style.top = (y - 28) + "px";
+    tooltipEl.classList.add("show");
+  }
+  function hideTooltip() {
+    tooltipEl.classList.remove("show");
+  }
+
+  // Draws background grid + all dots into a target SVG.
+  // Returns the query <circle> element (used by drag setup).
+  function renderPlot(svgId, options = {}) {
+    const svg = document.getElementById(svgId);
+    clearSvg(svg);
+    const {
+      highlightMajIdx = [],
+      highlightMinIdx = [],
+      drawQuery = true,
+      showHint = false
+    } = options;
+
+    // Background grid (very subtle)
+    for (let gx = 0; gx <= W; gx += 100) {
+      svg.appendChild(svgEl("line", {
+        x1: gx, y1: 0, x2: gx, y2: H,
+        stroke: "#f0f2f4", "stroke-width": 1
+      }));
+    }
+    for (let gy = 0; gy <= H; gy += 100) {
+      svg.appendChild(svgEl("line", {
+        x1: 0, y1: gy, x2: W, y2: gy,
+        stroke: "#f0f2f4", "stroke-width": 1
+      }));
+    }
+
+    // ── Majority dots
+    const sortedMaj = majority.map((p, i) => ({ ...p, d: dist(p, state.query), origIdx: i }))
+                              .sort((a, b) => a.d - b.d);
+    const rankOfMaj = {};
+    sortedMaj.forEach((p, r) => { rankOfMaj[p.origIdx] = r + 1; });
+    majority.forEach((p, i) => {
+      const isHi = highlightMajIdx.includes(i);
+      const r = isHi ? 7 : 4;
+      const dot = svgEl("circle", {
+        cx: p.x, cy: p.y, r: r,
+        fill: PAL.BLUE,
+        stroke: isHi ? PAL.NAVY : PAL.WHITE,
+        "stroke-width": isHi ? 2.5 : 1,
+        class: "anim-dot"
+      });
+      const ttRank = rankOfMaj[i];
+      const ttD = dist(p, state.query);
+      dot.addEventListener("mouseenter", (e) => {
+        showTooltip(`majority · rank ${ttRank} · d=${ttD.toFixed(1)}`, e.clientX, e.clientY);
+      });
+      dot.addEventListener("mousemove", (e) => {
+        tooltipEl.style.left = (e.clientX + 12) + "px";
+        tooltipEl.style.top = (e.clientY - 28) + "px";
+      });
+      dot.addEventListener("mouseleave", hideTooltip);
+      svg.appendChild(dot);
+    });
+
+    // ── Minority dots (on top of majority)
+    const sortedMin = minority.map((p, i) => ({ ...p, d: dist(p, state.query), origIdx: i }))
+                              .sort((a, b) => a.d - b.d);
+    const rankOfMin = {};
+    sortedMin.forEach((p, r) => { rankOfMin[p.origIdx] = r + 1; });
+    minority.forEach((p, i) => {
+      const isHi = highlightMinIdx.includes(i);
+      const r = isHi ? 8 : 5.5;
+      const dot = svgEl("circle", {
+        cx: p.x, cy: p.y, r: r,
+        fill: PAL.RED,
+        stroke: isHi ? PAL.NAVY : PAL.WHITE,
+        "stroke-width": isHi ? 2.5 : 1.2,
+        class: "anim-dot"
+      });
+      const ttRank = rankOfMin[i];
+      const ttD = dist(p, state.query);
+      dot.addEventListener("mouseenter", (e) => {
+        showTooltip(`minority · rank ${ttRank} · d=${ttD.toFixed(1)}`, e.clientX, e.clientY);
+      });
+      dot.addEventListener("mousemove", (e) => {
+        tooltipEl.style.left = (e.clientX + 12) + "px";
+        tooltipEl.style.top = (e.clientY - 28) + "px";
+      });
+      dot.addEventListener("mouseleave", hideTooltip);
+      svg.appendChild(dot);
+    });
+
+    // ── Query
+    let queryDot = null;
+    if (drawQuery) {
+      // Optional pulsing hint ring
+      if (showHint) {
+        const ring = svgEl("circle", {
+          cx: state.query.x, cy: state.query.y, r: 16,
+          fill: "none",
+          stroke: PAL.NAVY, "stroke-width": 2,
+          "stroke-dasharray": "3 3",
+          class: "query-hint"
+        });
+        svg.appendChild(ring);
+      }
+      queryDot = svgEl("circle", {
+        cx: state.query.x, cy: state.query.y, r: 9,
+        fill: PAL.NAVY, stroke: PAL.WHITE, "stroke-width": 2.5,
+        class: "query-dot"
+      });
+      svg.appendChild(queryDot);
+    }
+
+    // ── Legend
+    const lx = W - 130, ly = 18;
+    svg.appendChild(svgEl("circle", { cx: lx, cy: ly, r: 5, fill: PAL.BLUE }));
+    const t1 = svgEl("text", {
+      x: lx + 10, y: ly + 4,
+      "font-family": "system-ui, sans-serif",
+      "font-size": "11", fill: PAL.DARK
+    }); t1.textContent = `majority (${majority.length})`;
+    svg.appendChild(t1);
+    svg.appendChild(svgEl("circle", { cx: lx, cy: ly + 18, r: 6, fill: PAL.RED }));
+    const t2 = svgEl("text", {
+      x: lx + 10, y: ly + 22,
+      "font-family": "system-ui, sans-serif",
+      "font-size": "11", fill: PAL.DARK
+    }); t2.textContent = `minority (${minority.length})`;
+    svg.appendChild(t2);
+    svg.appendChild(svgEl("circle", { cx: lx, cy: ly + 36, r: 6.5, fill: PAL.NAVY }));
+    const t3 = svgEl("text", {
+      x: lx + 10, y: ly + 40,
+      "font-family": "system-ui, sans-serif",
+      "font-size": "11", fill: PAL.DARK
+    }); t3.textContent = "query (drag)";
+    svg.appendChild(t3);
+
+    return { svg, queryDot, sortedMaj, sortedMin };
+  }
+
+  function drawLine(svg, a, b, color, width = 2.5, label = null, labelOffsetY = -10) {
+    const line = svgEl("line", {
+      x1: a.x, y1: a.y, x2: b.x, y2: b.y,
+      stroke: color, "stroke-width": width,
+      "stroke-linecap": "round",
+      class: "anim-line"
+    });
+    svg.appendChild(line);
+    if (label) {
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2 + labelOffsetY;
+      const rect = svgEl("rect", {
+        x: mx - 28, y: my - 11,
+        width: 56, height: 16,
+        fill: PAL.WHITE,
+        stroke: color,
+        "stroke-width": 1.2,
+        rx: 3
+      });
+      svg.appendChild(rect);
+      const t = svgEl("text", {
+        x: mx, y: my + 1,
+        "font-family": "system-ui, sans-serif",
+        "font-size": "11",
+        "font-weight": "700",
+        fill: color,
+        "text-anchor": "middle",
+        "dominant-baseline": "middle"
+      });
+      t.textContent = label;
+      svg.appendChild(t);
+    }
+  }
+
+  // ─── Drag handler ─────────────────────────────────────────────────
+  function makeDraggable(svgId) {
+    const svg = document.getElementById(svgId);
+    const queryDot = svg.querySelector(".query-dot");
+    if (!queryDot) return;
+    let dragging = false;
+
+    function svgPoint(e) {
+      const pt = svg.createSVGPoint();
+      pt.x = e.clientX; pt.y = e.clientY;
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return null;
+      const t = pt.matrixTransform(ctm.inverse());
+      // Clamp to plot area
+      return {
+        x: Math.max(20, Math.min(W - 20, t.x)),
+        y: Math.max(20, Math.min(H - 20, t.y))
+      };
+    }
+
+    queryDot.addEventListener("pointerdown", (e) => {
+      dragging = true;
+      queryDot.classList.add("dragging");
+      try { queryDot.setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+    });
+    queryDot.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      const p = svgPoint(e);
+      if (p) setState({ query: p });
+    });
+    queryDot.addEventListener("pointerup", () => {
+      dragging = false;
+      queryDot.classList.remove("dragging");
+    });
+    queryDot.addEventListener("pointercancel", () => {
+      dragging = false;
+      queryDot.classList.remove("dragging");
+    });
+    // Also allow click anywhere on SVG to move query
+    svg.addEventListener("click", (e) => {
+      if (e.target === queryDot) return;
+      const p = svgPoint(e);
+      if (p) setState({ query: p });
+    });
+  }
+
+  // ─── Section 1: Standard vs FairRank split view ───────────────────
+  function renderStandard() {
+    const { sortedMaj, sortedMin } = renderPlot("svg-standard", {
+      highlightMajIdx: [],
+      highlightMinIdx: [],
+      drawQuery: true,
+      showHint: true
+    });
+    const svg = document.getElementById("svg-standard");
+    if (sortedMaj.length === 0 || sortedMin.length === 0) return;
+    drawLine(svg, state.query, sortedMaj[0], PAL.BLUE, 3, "d₁ᵐᵃʲ", -12);
+    drawLine(svg, state.query, sortedMin[0], PAL.RED, 3, "d₁ᵐⁱⁿ", 18);
+    makeDraggable("svg-standard");
+    // Prediction: closer of the two
+    const pred = sortedMin[0].d < sortedMaj[0].d ? "minority" : "majority";
+    const el = document.getElementById("pred-standard");
+    el.textContent = pred;
+    el.className = "pred" + (pred === "minority" ? " minority" : "");
+  }
+
+  function renderFair() {
+    const keff = calcKeff(state.alpha, state.IR);
+    const { sortedMaj, sortedMin } = renderPlot("svg-fair", {
+      drawQuery: true
+    });
+    const svg = document.getElementById("svg-fair");
+    if (sortedMaj.length === 0 || sortedMin.length === 0) return;
+    const majIdx = Math.min(keff - 1, sortedMaj.length - 1);
+    drawLine(svg, state.query, sortedMaj[majIdx], PAL.BLUE, 3, `d_${keff}ᵐᵃʲ`, -12);
+    drawLine(svg, state.query, sortedMin[0], PAL.RED, 3, "d₁ᵐⁱⁿ", 18);
+    makeDraggable("svg-fair");
+    // Prediction: closer
+    const pred = sortedMin[0].d < sortedMaj[majIdx].d ? "minority" : "majority";
+    const el = document.getElementById("pred-fair");
+    el.textContent = pred;
+    el.className = "pred" + (pred === "minority" ? " minority" : "");
+  }
+
+  // ─── Section 2: α controls k_eff ─────────────────────────────────
+  function renderAlphaSection() {
+    const keff = calcKeff(state.alpha, state.IR);
+    const { sortedMaj, sortedMin } = renderPlot("svg-alpha", {
+      highlightMajIdx: sortedMaj_safe_idx(),
+      highlightMinIdx: []
+    });
+    function sortedMaj_safe_idx() {
+      // Need sortedMaj available — placeholder; recompute below.
+      return [];
+    }
+    // Recompute with correct highlight
+    const svg = document.getElementById("svg-alpha");
+    clearSvg(svg);
+    const { sortedMaj: sm2, sortedMin: smin2 } = renderPlot("svg-alpha", {
+      highlightMajIdx: sortedMaj.length ? [sortedMaj[Math.min(keff - 1, sortedMaj.length - 1)].origIdx] : [],
+      highlightMinIdx: sortedMin.length ? [sortedMin[0].origIdx] : []
+    });
+
+    if (sortedMaj.length === 0 || sortedMin.length === 0) return;
+    const targetMaj = sortedMaj[Math.min(keff - 1, sortedMaj.length - 1)];
+    const targetMin = sortedMin[0];
+    drawLine(svg, state.query, targetMaj, PAL.BLUE, 3, `d_${keff}ᵐᵃʲ`, -12);
+    drawLine(svg, state.query, targetMin, PAL.RED, 3, "d₁ᵐⁱⁿ", 18);
+    makeDraggable("svg-alpha");
+
+    document.getElementById("d-min-val").textContent = targetMin.d.toFixed(1);
+    document.getElementById("d-maj-val").textContent = targetMaj.d.toFixed(1);
+    const closer = targetMin.d < targetMaj.d ? "minority" : "majority";
+    const cEl = document.getElementById("closer-val");
+    cEl.textContent = closer;
+    cEl.style.color = closer === "minority" ? PAL.RED : PAL.BLUE;
+
+    document.getElementById("alpha-r-current").textContent = state.IR;
+    document.getElementById("keff-1").textContent = state.IR;
+    document.getElementById("keff-half").textContent = calcKeff(0.5, state.IR);
+
+    // Render formula with KaTeX (HTML fallback below)
+    renderMath("formula-keff",
+      `k_{\\text{eff}} = \\text{round}(r^{\\alpha}) = \\text{round}(${state.IR}^{${state.alpha.toFixed(2)}}) = \\mathbf{${keff}}`,
+      `k<sub>eff</sub> = round(r<sup>α</sup>) = round(${state.IR}<sup>${state.alpha.toFixed(2)}</sup>) = <strong>${keff}</strong>`
+    );
+  }
+
+  // ─── Section 3: multi-vote ───────────────────────────────────────
+  function renderVoteSection() {
+    const keff = calcKeff(state.alpha, state.IR);
+    const nv = state.n_votes;
+    const svg = document.getElementById("svg-vote");
+    clearSvg(svg);
+
+    // Compute pairs first
+    const sortedMajAll = majority.map((p, i) => ({ ...p, d: dist(p, state.query), origIdx: i }))
+                                  .sort((a, b) => a.d - b.d);
+    const sortedMinAll = minority.map((p, i) => ({ ...p, d: dist(p, state.query), origIdx: i }))
+                                  .sort((a, b) => a.d - b.d);
+
+    const minIdxs = [];
+    const majIdxs = [];
+    const pairs = [];
+    for (let i = 1; i <= nv; i++) {
+      const minIdx = i - 1;
+      const majRank = i * keff;
+      const majIdx = Math.min(majRank - 1, sortedMajAll.length - 1);
+      if (minIdx >= sortedMinAll.length) break;
+      minIdxs.push(sortedMinAll[minIdx].origIdx);
+      majIdxs.push(sortedMajAll[majIdx].origIdx);
+      const m = sortedMinAll[minIdx];
+      const M = sortedMajAll[majIdx];
+      pairs.push({
+        i, keff, majRank,
+        m, M,
+        minWins: m.d < M.d,
+        d_min: m.d, d_maj: M.d
+      });
+    }
+
+    // Re-render with highlights (we already cleared so use renderPlot)
+    const { } = renderPlot("svg-vote", {
+      highlightMajIdx: majIdxs,
+      highlightMinIdx: minIdxs
+    });
+
+    // Draw vote lines (rendered after re-init)
+    pairs.forEach((p, idx) => {
+      const baseOpacity = 0.45 + 0.55 * (1 - idx / nv);
+      const isHi = state.highlightVoteIdx === p.i;
+      const opacity = isHi ? 1.0 : baseOpacity;
+      const width  = isHi ? 3.5 : 1.5;
+      const minLine = svgEl("line", {
+        x1: state.query.x, y1: state.query.y,
+        x2: p.m.x, y2: p.m.y,
+        stroke: PAL.RED, "stroke-width": width,
+        "stroke-opacity": opacity
+      });
+      svg.appendChild(minLine);
+      const majLine = svgEl("line", {
+        x1: state.query.x, y1: state.query.y,
+        x2: p.M.x, y2: p.M.y,
+        stroke: PAL.BLUE, "stroke-width": width,
+        "stroke-opacity": opacity
+      });
+      svg.appendChild(majLine);
+    });
+
+    makeDraggable("svg-vote");
+
+    // Render tally
+    const tallyDiv = document.getElementById("vote-tally");
+    tallyDiv.innerHTML = "";
+    let minorityWins = 0;
+    pairs.forEach(v => {
+      if (v.minWins) minorityWins++;
+      const row = document.createElement("div");
+      row.className = "vote-row " + (v.minWins ? "minority" : "majority");
+      row.innerHTML = `
+        <span class="idx">#${v.i}</span>
+        <span class="comparison">d_${v.i}ᵐⁱⁿ  vs  d_${v.majRank}ᵐᵃʲ</span>
+        <span class="winner ${v.minWins ? "min" : "maj"}">${v.minWins ? "minority" : "majority"}</span>
+        <span class="strength">${v.d_min.toFixed(0)} vs ${v.d_maj.toFixed(0)}</span>
+      `;
+      row.addEventListener("mouseenter", () => {
+        state.highlightVoteIdx = v.i;
+        renderVoteSection();
+      });
+      row.addEventListener("mouseleave", () => {
+        state.highlightVoteIdx = null;
+        renderVoteSection();
+      });
+      tallyDiv.appendChild(row);
+    });
+
+    // Decision with flip animation
+    const fraction = pairs.length === 0 ? 0 : minorityWins / pairs.length;
+    const decision = fraction > 0.5 ? "minority" : "majority";
+    const decisionDiv = document.getElementById("vote-decision");
+    const previousDecision = decisionDiv.dataset.decision;
+    decisionDiv.className = "decision " + decision;
+    if (previousDecision && previousDecision !== decision) {
+      decisionDiv.classList.add("flipped");
+      setTimeout(() => decisionDiv.classList.remove("flipped"), 700);
+    }
+    decisionDiv.dataset.decision = decision;
+    document.getElementById("decision-text").textContent =
+      `${minorityWins}/${pairs.length} = ${(fraction * 100).toFixed(0)}%  →  ${decision}`;
+  }
+
+  // ─── Section 4: Inner CV grid with fold animation ─────────────────
+  const ALPHAS = [0.25, 0.5, 0.75, 1.0];
+  const NVOTES = [1, 2, 3, 5, 7, 10];
+  // Realistic-looking score grid (peak around α=0.75, n=5)
+  // (Modelled after typical patterns from the project's inner CV runs.)
+  function realisticScore(alpha, nv) {
+    const dAlpha = alpha - 0.78;
+    const dNv = (Math.log2(nv) - Math.log2(5)) / Math.log2(10);
+    const peak = 0.835 - 6 * dAlpha * dAlpha - 0.06 * dNv * dNv;
+    const noise = ((Math.sin(alpha * 13 + nv * 7) + 1) / 2) * 0.012;
+    return Math.max(0.5, Math.min(0.99, peak + noise));
+  }
+
+  function buildCVGrid() {
+    const grid = document.getElementById("cv-grid");
+    grid.innerHTML = "";
+    const corner = document.createElement("div");
+    corner.className = "cv-cell header";
+    corner.textContent = "α \\ n_v";
+    grid.appendChild(corner);
+    NVOTES.forEach(nv => {
+      const h = document.createElement("div");
+      h.className = "cv-cell header";
+      h.textContent = `n=${nv}`;
+      grid.appendChild(h);
+    });
+    ALPHAS.forEach(alpha => {
+      const rh = document.createElement("div");
+      rh.className = "cv-cell rowhead";
+      rh.textContent = `α=${alpha}`;
+      grid.appendChild(rh);
+      NVOTES.forEach(nv => {
+        const cell = document.createElement("div");
+        cell.className = "cv-cell";
+        cell.dataset.alpha = alpha;
+        cell.dataset.nv = nv;
+        cell.dataset.score = realisticScore(alpha, nv).toFixed(3);
+        cell.innerHTML = `<span class="score-text"></span>
+                          <div class="fold-progress">
+                            <div class="fold-dot"></div>
+                            <div class="fold-dot"></div>
+                            <div class="fold-dot"></div>
+                          </div>`;
+        grid.appendChild(cell);
+      });
+    });
+  }
+  buildCVGrid();
+
+  let cvRunning = false;
+
+  async function runInnerCV() {
+    if (cvRunning) return;
+    cvRunning = true;
+    const cells = Array.from(document.querySelectorAll(".cv-cell:not(.header):not(.rowhead)"));
+    cells.forEach(c => {
+      c.classList.remove("filled", "best", "evaluating");
+      c.querySelector(".score-text").textContent = "";
+      c.querySelectorAll(".fold-dot").forEach(d => d.classList.remove("done"));
+    });
+
+    document.getElementById("cv-result").textContent = "Evaluating folds…";
+    document.getElementById("alpha-star").textContent = "—";
+    document.getElementById("nv-star").textContent = "—";
+    document.getElementById("gmean-star").textContent = "—";
+
+    // Show fold viz panel
+    const foldViz = document.getElementById("fold-viz");
+    const foldBar = document.getElementById("fold-bar");
+    const foldLabel = document.getElementById("fold-current-label");
+    foldViz.style.display = "block";
+    foldBar.innerHTML =
+      '<div class="fold-segment train">train</div>' +
+      '<div class="fold-segment train">train</div>' +
+      '<div class="fold-segment val">val</div>';
+
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    let bestScore = -Infinity;
+    let bestCell = null;
+
+    for (let i = 0; i < cells.length; i++) {
+      const cell = cells[i];
+      cell.classList.add("evaluating");
+      foldLabel.textContent = `Cell (α=${cell.dataset.alpha}, n=${cell.dataset.nv})  ·  fold 1 of 3`;
+      // Animate 3 folds: rotate which segment is "val"
+      const segs = foldBar.querySelectorAll(".fold-segment");
+      const foldDots = cell.querySelectorAll(".fold-dot");
+      for (let f = 0; f < 3; f++) {
+        // Rotate val to position f
+        segs.forEach((s, idx) => {
+          s.className = "fold-segment " + (idx === f ? "val" : "train");
+          s.textContent = idx === f ? "val" : "train";
+        });
+        foldLabel.textContent =
+          `Cell (α=${cell.dataset.alpha}, n=${cell.dataset.nv})  ·  fold ${f + 1} of 3`;
+        await sleep(60);
+        foldDots[f].classList.add("done");
+        await sleep(40);
+      }
+      const score = parseFloat(cell.dataset.score);
+      cell.classList.remove("evaluating");
+      cell.classList.add("filled");
+      cell.querySelector(".score-text").textContent = score.toFixed(3);
+      if (score > bestScore) { bestScore = score; bestCell = cell; }
+    }
+
+    // Final: highlight best
+    if (bestCell) {
+      bestCell.classList.add("best");
+      const a = bestCell.dataset.alpha;
+      const n = bestCell.dataset.nv;
+      const s = bestCell.dataset.score;
+      document.getElementById("alpha-star").textContent = a;
+      document.getElementById("nv-star").textContent = n;
+      document.getElementById("gmean-star").textContent = s;
+      document.getElementById("cv-result").textContent =
+        `Best  (α*, n_votes*) = (${a}, ${n})  with G-Mean = ${s}`;
+    }
+    foldLabel.textContent = `Complete — all 24 cells × 3 folds evaluated`;
+    cvRunning = false;
+  }
+
+  function resetInnerCV() {
+    if (cvRunning) return;
+    const cells = Array.from(document.querySelectorAll(".cv-cell:not(.header):not(.rowhead)"));
+    cells.forEach(c => {
+      c.classList.remove("filled", "best", "evaluating");
+      c.querySelector(".score-text").textContent = "";
+      c.querySelectorAll(".fold-dot").forEach(d => d.classList.remove("done"));
+    });
+    document.getElementById("cv-result").textContent = "Awaiting search…";
+    document.getElementById("alpha-star").textContent = "—";
+    document.getElementById("nv-star").textContent = "—";
+    document.getElementById("gmean-star").textContent = "—";
+    document.getElementById("fold-viz").style.display = "none";
+  }
+
+  // ─── Math rendering (KaTeX + HTML/Unicode fallback) ─────────────────
+  // If KaTeX is available, use it for proper LaTeX rendering.
+  // Otherwise, fall back to inline HTML with Unicode super/subscripts,
+  // so the page still looks decent fully offline.
+  function renderMath(elementId, latex, htmlFallback) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    if (window.katex) {
+      try {
+        window.katex.render(latex, el, { throwOnError: false, displayMode: false });
+        return;
+      } catch (e) { /* fall through */ }
+    }
+    el.innerHTML = htmlFallback;
+  }
+
+  // ─── Master render — called on every state change ─────────────────
+  let renderScheduled = false;
+  function scheduleRender() {
+    if (renderScheduled) return;
+    renderScheduled = true;
+    requestAnimationFrame(() => {
+      renderScheduled = false;
+      renderAll();
+    });
+  }
+
+  function renderAll() {
+    renderStandard();
+    renderFair();
+    renderAlphaSection();
+    renderVoteSection();
+    // Sync slider displays
+    document.getElementById("ir-val").textContent = state.IR;
+    document.getElementById("alpha1-val").textContent = state.alpha.toFixed(2);
+    document.getElementById("alpha2-val").textContent = state.alpha.toFixed(2);
+    document.getElementById("alpha3-val").textContent = state.alpha.toFixed(2);
+    document.getElementById("nv-val").textContent = state.n_votes;
+    // Save to URL hash (throttled internally by browser)
+    saveToHash();
+  }
+
+  function setState(patch) {
+    Object.assign(state, patch);
+    if (patch.IR !== undefined) {
+      regenerateMinority();
+    }
+    scheduleRender();
+  }
+
+  // ─── URL state (location.hash) ────────────────────────────────────
+  function saveToHash() {
+    const params = new URLSearchParams();
+    params.set("a", state.alpha.toFixed(2));
+    params.set("n", state.n_votes);
+    params.set("ir", state.IR);
+    params.set("qx", state.query.x.toFixed(0));
+    params.set("qy", state.query.y.toFixed(0));
+    try { history.replaceState(null, "", "#" + params.toString()); } catch (e) {}
+  }
+  function loadFromHash() {
+    if (!location.hash) return;
+    try {
+      const params = new URLSearchParams(location.hash.substring(1));
+      if (params.has("a"))  state.alpha = parseFloat(params.get("a"));
+      if (params.has("n"))  state.n_votes = parseInt(params.get("n"), 10);
+      if (params.has("ir")) state.IR = parseInt(params.get("ir"), 10);
+      if (params.has("qx") && params.has("qy"))
+        state.query = { x: parseFloat(params.get("qx")), y: parseFloat(params.get("qy")) };
+      regenerateMinority();
+    } catch (e) { /* ignore malformed hash */ }
+  }
+  loadFromHash();
+
+  // ─── Top-level slider wiring ───────────────────────────────────────
+  document.getElementById("ir-slider").addEventListener("input", (e) => {
+    setState({ IR: parseInt(e.target.value, 10) });
+  });
+  function bindAlphaSliders() {
+    const sliders = [
+      ["alpha1-slider", "alpha1-val"],
+      ["alpha2-slider", "alpha2-val"],
+      ["alpha3-slider", "alpha3-val"]
+    ];
+    sliders.forEach(([sId, vId]) => {
+      const el = document.getElementById(sId);
+      el.addEventListener("input", (e) => {
+        const a = parseInt(e.target.value, 10) / 100;
+        // sync all three sliders
+        sliders.forEach(([s2]) => {
+          if (s2 !== sId) document.getElementById(s2).value = e.target.value;
+        });
+        setState({ alpha: a });
+      });
+    });
+  }
+  bindAlphaSliders();
+  document.getElementById("nv-slider").addEventListener("input", (e) => {
+    setState({ n_votes: parseInt(e.target.value, 10) });
+  });
+
+  document.getElementById("cv-run").addEventListener("click", runInnerCV);
+  document.getElementById("cv-reset").addEventListener("click", resetInnerCV);
+
+  // ─── Presets ───────────────────────────────────────────────────────
+  document.querySelectorAll(".preset").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const name = btn.dataset.preset;
+      const p = PRESETS[name];
+      if (!p) return;
+      document.querySelectorAll(".preset").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      Object.assign(state, p);
+      regenerateMinority();
+      // sync sliders' DOM values
+      document.getElementById("ir-slider").value = state.IR;
+      scheduleRender();
+    });
+  });
+
+  document.getElementById("btn-reset").addEventListener("click", () => {
+    Object.assign(state, {
+      query: { x: 310, y: 180 },
+      alpha: 0.75,
+      n_votes: 5,
+      IR: 8,
+      minoritySigma: 35,
+      minorityCx: 420
+    });
+    regenerateMinority();
+    document.getElementById("ir-slider").value = 8;
+    document.getElementById("alpha1-slider").value = 75;
+    document.getElementById("alpha2-slider").value = 75;
+    document.getElementById("alpha3-slider").value = 75;
+    document.getElementById("nv-slider").value = 5;
+    document.querySelectorAll(".preset").forEach(b => b.classList.remove("active"));
+    document.querySelector('.preset[data-preset="standard"]').classList.add("active");
+    history.replaceState(null, "", location.pathname);
+    scheduleRender();
+  });
+
+  // ─── Guided tour ───────────────────────────────────────────────────
+  let tourActive = false;
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  async function playTour() {
+    if (tourActive) return;
+    tourActive = true;
+    document.body.classList.add("touring");
+    const banner = document.getElementById("tour-banner");
+    const msg = document.getElementById("tour-msg");
+
+    function focus(secId, text) {
+      msg.textContent = text;
+      document.querySelectorAll("section").forEach(s => s.classList.remove("focus"));
+      const sec = document.getElementById(secId);
+      if (sec) {
+        sec.classList.add("focus");
+        sec.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+
+    // STAGE 1 — split view, drag query across
+    focus("section-1", "1 / 4  ·  Watch how Standard KNN and FairRank diverge as the query moves");
+    await sleep(1800);
+    if (!tourActive) return endTour();
+    // Animate query position
+    for (let xq = 280; xq <= 400; xq += 5) {
+      if (!tourActive) return endTour();
+      setState({ query: { x: xq, y: 180 } });
+      await sleep(50);
+    }
+    for (let xq = 400; xq >= 280; xq -= 5) {
+      if (!tourActive) return endTour();
+      setState({ query: { x: xq, y: 180 } });
+      await sleep(50);
+    }
+
+    // STAGE 2 — alpha sweep
+    focus("section-2", "2 / 4  ·  Sweep α from 0 to 1 — see k_eff grow from 1 to r");
+    await sleep(1400);
+    for (let a = 0; a <= 100; a += 4) {
+      if (!tourActive) return endTour();
+      document.getElementById("alpha2-slider").value = a;
+      document.getElementById("alpha2-slider").dispatchEvent(new Event("input"));
+      await sleep(60);
+    }
+    await sleep(400);
+
+    // STAGE 3 — multi-vote
+    focus("section-3", "3 / 4  ·  Increase n_votes from 1 to 10");
+    await sleep(1400);
+    for (let nv = 1; nv <= 10; nv++) {
+      if (!tourActive) return endTour();
+      document.getElementById("nv-slider").value = nv;
+      document.getElementById("nv-slider").dispatchEvent(new Event("input"));
+      await sleep(280);
+    }
+    await sleep(400);
+
+    // STAGE 4 — inner CV
+    focus("section-4", "4 / 4  ·  Inner CV picks (α*, n_votes*) automatically");
+    await sleep(1200);
+    runInnerCV();
+    // Wait for CV to complete (cells * folds * ~100ms)
+    while (cvRunning) {
+      if (!tourActive) return endTour();
+      await sleep(200);
+    }
+    await sleep(1500);
+    endTour();
+  }
+
+  function endTour() {
+    tourActive = false;
+    document.body.classList.remove("touring");
+    document.querySelectorAll("section").forEach(s => s.classList.remove("focus"));
+  }
+
+  document.getElementById("btn-tour").addEventListener("click", playTour);
+  document.getElementById("tour-stop").addEventListener("click", endTour);
+
+  // ─── Auto-render section-title formulas (re-run when CDN loads) ────
+  function renderAllKatex() {
+    renderMath("math-keff",
+      "k_{\\text{eff}} = \\text{round}(r^{\\alpha})",
+      'k<sub>eff</sub> = round(r<sup>α</sup>)');
+    renderMath("math-multivote",
+      "\\text{vote}_i \\;=\\; [\\, d_i^{\\min} < d_{i\\cdot k_{\\text{eff}}}^{\\max}\\,]",
+      'vote<sub>i</sub> = [&thinsp;d<sub>i</sub><sup>min</sup> &lt; d<sub>i·k<sub>eff</sub></sub><sup>maj</sup>&thinsp;]');
+    // Re-render the live formula (depends on current state)
+    renderAlphaSection();
+  }
+  if (document.readyState === "complete" || document.readyState === "interactive") {
+    setTimeout(renderAllKatex, 80);
+  } else {
+    window.addEventListener("DOMContentLoaded", () => setTimeout(renderAllKatex, 80));
+  }
+  // Re-render KaTeX after CDN script loads (script is `defer`-ed)
+  window.addEventListener("load", renderAllKatex);
+
+  // ─── Init slider DOM values from state ─────────────────────────────
+  document.getElementById("ir-slider").value = state.IR;
+  document.getElementById("alpha1-slider").value = Math.round(state.alpha * 100);
+  document.getElementById("alpha2-slider").value = Math.round(state.alpha * 100);
+  document.getElementById("alpha3-slider").value = Math.round(state.alpha * 100);
+  document.getElementById("nv-slider").value = state.n_votes;
+
+  // First paint
+  scheduleRender();
+
+  // Make sure all draggable plots are wired (after initial render)
+  setTimeout(() => {
+    makeDraggable("svg-standard");
+    makeDraggable("svg-fair");
+    makeDraggable("svg-alpha");
+    makeDraggable("svg-vote");
+  }, 200);
+
+})();
+</script>
+
+</body>
+</html>
