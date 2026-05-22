@@ -29,7 +29,7 @@ from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from src.data.loader import Dataset
-from src.data.preprocessing import binarise_labels, remove_constant_features
+from src.data.preprocessing import binarise_labels
 from src.evaluation.metrics import compute_all_metrics
 from src.utils.config import load_config
 
@@ -76,17 +76,17 @@ def _run_dataset(
     if not algs_to_run:
         return []
 
-    X_num = remove_constant_features(ds.X)
+    X_num_full = ds.X
     y = binarise_labels(ds.y)
     rows = []
 
     # cv.split only needs row count; supply a dummy column when X_num is empty
-    _split_X = X_num if X_num.shape[1] > 0 else np.zeros((len(y), 1))
+    _split_X = X_num_full if X_num_full.shape[1] > 0 else np.zeros((len(y), 1))
     for repeat_fold_idx, (train_idx, test_idx) in enumerate(cv.split(_split_X, y)):
         fold = repeat_fold_idx % cv_folds
         repeat = repeat_fold_idx // cv_folds
 
-        X_num_tr, X_num_te = X_num[train_idx].copy(), X_num[test_idx].copy()
+        X_num_tr, X_num_te = X_num_full[train_idx].copy(), X_num_full[test_idx].copy()
         y_train, y_test = y[train_idx], y[test_idx]
 
         # Numerical NaN: impute with train-fold medians (no leakage)
@@ -97,7 +97,26 @@ def _run_dataset(
             X_num_tr[nan_tr] = np.take(col_medians, np.where(nan_tr)[1])
             X_num_te[nan_te] = np.take(col_medians, np.where(nan_te)[1])
 
-        # Categorical NaN + OHE: fit entirely on training split (no leakage)
+        # Drop features that are constant in the training fold (mask fitted on
+        # train only — test never influences which features are kept).
+        if X_num_tr.shape[1] > 0:
+            _num_std = np.nanstd(X_num_tr, axis=0)
+            _num_mask = np.isfinite(_num_std) & (_num_std > 0)
+            X_num_tr = X_num_tr[:, _num_mask]
+            X_num_te = X_num_te[:, _num_mask]
+
+        # Categorical NaN + OHE: fit entirely on training split (no leakage).
+        # Two deliberate behaviours to be aware of:
+        #   (a) SimpleImputer silently drops categorical columns that are 100%
+        #       NaN within this training fold (sklearn emits a UserWarning).
+        #       Has been observed on at least one dataset in this suite. Both
+        #       train and test lose that column consistently, so the encoded
+        #       matrices stay aligned — predictions are unaffected, but a
+        #       feature whose only signal lives in the test rows is discarded.
+        #   (b) OneHotEncoder uses handle_unknown="ignore": categories appearing
+        #       in test but not in this training fold are encoded as all-zeros
+        #       rather than raising. Equivalent to "unknown category" being a
+        #       distinct, neutral encoding.
         if ds.cat_raw is not None:
             _imp = SimpleImputer(strategy="most_frequent")
             cat_tr = _imp.fit_transform(ds.cat_raw[train_idx])
