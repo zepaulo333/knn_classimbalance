@@ -17,7 +17,7 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 from scipy.spatial.distance import cdist, euclidean
 from joblib import Parallel, delayed
-from sklearn.metrics import balanced_accuracy_score
+from src.evaluation.metrics import geometric_mean as _gmean_score
 from sklearn.model_selection import StratifiedKFold
 
 from src.utils.config import load_config
@@ -140,8 +140,8 @@ class KNNOptK:
     """KNN with k selected by inner cross-validation — the proper baseline.
 
     For each call to ``fit``, runs a stratified inner CV over a data-driven
-    range of odd k values from 1 to sqrt(n_train), scoring by balanced
-    accuracy (appropriate for imbalanced problems).  The best k is then used
+    range of odd k values from 1 to sqrt(n_train), scoring by G-Mean
+    (appropriate for imbalanced problems).  The best k is then used
     to fit a final ``KNNClassifierFast`` on the full training set.
 
     The k range is derived from the training data at fit time, so it scales
@@ -186,7 +186,7 @@ class KNNOptK:
                 return k, None
             clf = KNNClassifierFast(k=k)
             clf.fit(X_tr, y_tr)
-            return k, balanced_accuracy_score(y_val, clf.predict(X_val))
+            return k, _gmean_score(y_val, clf.predict(X_val))
 
         splits = [
             (X[tr], X[val], y[tr], y[val])
