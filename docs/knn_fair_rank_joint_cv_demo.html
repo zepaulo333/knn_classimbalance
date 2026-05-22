@@ -1,826 +1,1986 @@
 <!DOCTYPE html>
-<html lang="pt">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KNNFairRankJointCV — Interactive Illustration</title>
-<meta name="description" content="Interactive visualisation of the KNNFairRankJointCV algorithm: drag the query, change imbalance, watch inner CV unfold.">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>KNNFairRank — A correction to the oldest classifier</title>
+<meta name="description" content="A Poisson-derived rank correction for class imbalance. CC2008 · Machine Learning I · University of Porto 2025/2026.">
 
-<!-- KaTeX (CDN with graceful Unicode fallback if offline) -->
+<!-- KaTeX (graceful HTML/Unicode fallback if offline) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
 
 <style>
-  /* ─── Palette (U.Porto) ────────────────────────────────────────────── */
+  /* ═══════════════════════════════════════════════════════════════════
+     DESIGN TOKENS — Apple-inspired premium palette
+     ═══════════════════════════════════════════════════════════════════ */
   :root {
-    --navy:    #003D7A;
-    --blue:    #0d6efd;
-    --pale:    #E7F0FA;
-    --light:   #F8F9FA;
-    --gray:    #6C757D;
-    --darkgray:#404653;
-    --dark:    #212939;
-    --white:   #FFFFFF;
-    --green:   #10824D;
-    --red:     #C0392B;
-    --amber:   #D98216;
-    --shadow:  0 2px 12px rgba(0,61,122,0.08);
-    --shadowL: 0 4px 20px rgba(0,61,122,0.14);
+    /* Neutrals (Apple's near-black & near-white, plus our hairlines) */
+    --bg:        #ffffff;
+    --bg-soft:   #fbfbfd;
+    --bg-tint:   #f5f5f7;
+    --ink:       #1d1d1f;
+    --ink-dim:   #424245;
+    --muted:     #6e6e73;
+    --muted-2:   #86868b;
+    --hairline:  #d2d2d7;
+    --hairline-soft: #e8e8ed;
+
+    /* Accent (U.Porto blue, slightly modernised) */
+    --accent:        #0066cc;
+    --accent-hover:  #0055aa;
+    --accent-deep:   #003d7a;
+    --accent-pale:   #e6f0fa;
+    --accent-tint:   #f0f7ff;
+
+    /* Semantic */
+    --success:    #1d9d4d;
+    --success-bg: #e9f7ee;
+    --danger:     #d93025;
+    --danger-bg:  #fdeded;
+    --warning:    #d97e00;
+    --warning-bg: #fdf2e2;
+
+    /* Effects */
+    --shadow-xs:  0 1px 2px rgba(0,0,0,0.04);
+    --shadow-sm:  0 2px 8px rgba(0,0,0,0.04);
+    --shadow-md:  0 8px 30px rgba(0,0,0,0.06);
+    --shadow-lg:  0 24px 60px rgba(0,0,0,0.08);
+    --shadow-card: 0 1px 0 rgba(0,0,0,0.02), 0 8px 32px rgba(0,0,0,0.05);
+
+    --radius-sm: 8px;
+    --radius:    14px;
+    --radius-lg: 22px;
+    --radius-xl: 28px;
+
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Layout */
+    --container: 1180px;
+    --container-narrow: 920px;
+    --nav-h: 56px;
   }
 
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
+  /* ═══════════════════════════════════════════════════════════════════
+     RESET + BASE
+     ═══════════════════════════════════════════════════════════════════ */
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Calibri,
-                 Tahoma, Geneva, Verdana, sans-serif;
-    color: var(--dark);
-    background: var(--white);
-    line-height: 1.55;
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+                 "SF Pro Text", "Inter", "Segoe UI Variable",
+                 "Segoe UI", system-ui, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+  ::selection { background: var(--accent); color: white; }
+
+  /* Typography (Apple display style with negative tracking) */
+  h1, h2, h3 {
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    color: var(--ink);
+    margin: 0;
+    line-height: 1.07;
+  }
+  p { margin: 0; }
+  a { color: var(--accent); text-decoration: none; transition: color 0.2s; }
+  a:hover { color: var(--accent-hover); }
+  code, .mono {
+    font-family: "SF Mono", "JetBrains Mono", ui-monospace, Menlo,
+                 Consolas, monospace;
+    font-variant-ligatures: none;
   }
 
-  /* ─── Header ─────────────────────────────────────────────────────── */
-  header {
-    background: var(--navy);
-    color: var(--white);
-    padding: 36px 48px 28px;
-    border-bottom: 4px solid var(--blue);
+  .container {
+    max-width: var(--container);
+    margin: 0 auto;
+    padding: 0 32px;
+  }
+  .container-narrow {
+    max-width: var(--container-narrow);
+    margin: 0 auto;
+    padding: 0 32px;
+  }
+  .eyebrow {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     STICKY NAV — glass effect
+     ═══════════════════════════════════════════════════════════════════ */
+  .topnav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.3s, background 0.3s, box-shadow 0.3s;
+  }
+  .topnav.scrolled {
+    background: rgba(255, 255, 255, 0.92);
+    border-bottom-color: rgba(0, 0, 0, 0.08);
+    box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+  }
+  .nav-inner {
+    height: var(--nav-h);
+    max-width: var(--container);
+    margin: 0 auto;
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    gap: 32px;
+  }
+  .nav-brand {
+    font-weight: 600;
+    font-size: 17px;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    text-decoration: none;
+    flex-shrink: 0;
+  }
+  .nav-brand::after {
+    content: ".";
+    color: var(--accent);
+  }
+  .nav-links {
+    display: flex;
+    gap: 28px;
+    flex: 1;
+  }
+  .nav-links a {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--muted);
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--ink); }
+  .nav-cta {
+    background: var(--ink);
+    color: white;
+    border: none;
+    padding: 8px 18px;
+    border-radius: 980px;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+  }
+  .nav-cta:hover { background: #2d2d2f; }
+  .nav-cta:active { transform: scale(0.98); }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     HERO  — cinematic with animated radial gradient glow
+     ═══════════════════════════════════════════════════════════════════ */
+  .hero {
+    padding: 140px 0 110px;
+    text-align: center;
+    background: var(--bg);
     position: relative;
+    overflow: hidden;
   }
-  header .kicker {
-    font-size: 12px;
-    letter-spacing: 1.5px;
-    font-weight: 700;
-    color: var(--pale);
-    opacity: 0.85;
+  .hero-bg-glow {
+    position: absolute;
+    top: -300px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 1100px;
+    height: 800px;
+    background: radial-gradient(ellipse at center,
+                rgba(0, 102, 204, 0.10) 0%,
+                rgba(0, 102, 204, 0.04) 30%,
+                transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+    animation: heroGlow 8s ease-in-out infinite;
   }
-  header h1 {
-    font-size: 38px;
-    margin: 6px 0 4px;
-    font-weight: 700;
-    letter-spacing: -0.5px;
+  @keyframes heroGlow {
+    0%, 100% { opacity: 0.7; transform: translateX(-50%) scale(1); }
+    50%      { opacity: 1.0; transform: translateX(-50%) scale(1.06); }
   }
-  header .subtitle {
-    font-size: 16px;
-    color: var(--pale);
-    margin: 0 0 18px;
-    font-style: italic;
-    max-width: 900px;
+  .hero > .container { position: relative; z-index: 1; }
+  .hero-scroll-hint {
+    margin-top: 80px;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    color: var(--muted-2);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 500;
   }
-  header .header-actions {
+  .hero-scroll-hint .scroll-line {
+    width: 1px;
+    height: 36px;
+    background: linear-gradient(to bottom, var(--hairline), transparent);
+    position: relative;
+    overflow: hidden;
+  }
+  .hero-scroll-hint .scroll-line::after {
+    content: "";
+    position: absolute;
+    top: -8px;
+    left: 0;
+    width: 100%;
+    height: 12px;
+    background: var(--accent);
+    animation: scrollDot 2.4s ease-in-out infinite;
+  }
+  @keyframes scrollDot {
+    0%   { transform: translateY(0); opacity: 1; }
+    70%  { transform: translateY(36px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 0; }
+  }
+  .hero-eyebrow {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--accent);
+    margin-bottom: 28px;
+    letter-spacing: 0.02em;
+  }
+  .hero-title {
+    font-size: clamp(48px, 9vw, 96px);
+    font-weight: 600;
+    letter-spacing: -0.035em;
+    margin: 0 0 22px;
+    line-height: 1.02;
+  }
+  .hero-title .accent {
+    background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .hero-subtitle {
+    font-size: clamp(20px, 2.5vw, 26px);
+    color: var(--muted);
+    max-width: 720px;
+    margin: 0 auto 44px;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    line-height: 1.35;
+  }
+  .hero-ctas {
     display: flex;
     gap: 12px;
+    justify-content: center;
     flex-wrap: wrap;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 13px 26px;
+    border-radius: 980px;
+    font-size: 15px;
+    font-weight: 500;
+    font-family: inherit;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s var(--ease-smooth);
+    text-decoration: none;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+  }
+  .btn-primary:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(0, 102, 204, 0.25);
+  }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-secondary {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--hairline);
+  }
+  .btn-secondary:hover {
+    background: var(--bg-tint);
+    border-color: var(--ink-dim);
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--accent);
+    padding: 8px 0;
+  }
+  .btn-ghost:hover { color: var(--accent-hover); }
+  .btn-ghost::after {
+    content: "›";
+    margin-left: 4px;
+    transition: transform 0.2s;
+    display: inline-block;
+  }
+  .btn-ghost:hover::after { transform: translateX(3px); }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     KEY STATS ROW
+     ═══════════════════════════════════════════════════════════════════ */
+  .stats-strip {
+    border-top: 1px solid var(--hairline-soft);
+    border-bottom: 1px solid var(--hairline-soft);
+    background: var(--bg-soft);
+    padding: 60px 0;
+  }
+  .stats-grid {
+    max-width: var(--container);
+    margin: 0 auto;
+    padding: 0 32px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    text-align: center;
+  }
+  .stat-block {
+    padding: 12px;
+  }
+  .stat-block .num {
+    font-size: clamp(40px, 5vw, 56px);
+    font-weight: 600;
+    letter-spacing: -0.035em;
+    line-height: 1;
+    color: var(--ink);
+  }
+  .stat-block.accent-num .num {
+    background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .stat-block .num small {
+    font-size: 0.4em;
+    color: var(--muted);
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+  .stat-block .label {
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     SECTIONS — Apple chapter style
+     ═══════════════════════════════════════════════════════════════════ */
+  section {
+    padding: 110px 0;
+    scroll-margin-top: var(--nav-h);
+  }
+  section.tinted { background: var(--bg-soft); }
+  section.dark {
+    background: var(--ink);
+    color: white;
+  }
+  section.dark h2, section.dark h3 { color: white; }
+  section.dark .muted-text { color: rgba(255, 255, 255, 0.7); }
+  section.dark .eyebrow { color: #5aa3ff; }
+
+  .section-head {
+    text-align: center;
+    max-width: 780px;
+    margin: 0 auto 64px;
+  }
+  .section-head h2 {
+    font-size: clamp(34px, 5vw, 56px);
+    margin-bottom: 18px;
+  }
+  .section-head h2 .accent {
+    color: var(--accent);
+  }
+  .section-head .lede {
+    font-size: clamp(17px, 1.8vw, 21px);
+    color: var(--muted);
+    line-height: 1.5;
+    font-weight: 400;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     PROBLEM SECTION — split layout
+     ═══════════════════════════════════════════════════════════════════ */
+  .problem-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 60px;
     align-items: center;
   }
-  header .header-actions .label {
+  .problem-text h2 {
+    font-size: clamp(30px, 4vw, 44px);
+    margin-bottom: 22px;
+  }
+  .problem-text p {
+    font-size: 18px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-bottom: 24px;
+  }
+  .formula-card {
+    background: var(--bg);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    padding: 26px 30px;
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+  }
+  .formula-card .formula-label {
     font-size: 11px;
-    color: var(--pale);
     text-transform: uppercase;
-    letter-spacing: 1px;
-    opacity: 0.7;
-    margin-right: 4px;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
+  .formula-card .formula-body {
+    font-size: 22px;
+    color: var(--ink);
+  }
+  .formula-card .formula-note {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 12px;
+    font-style: italic;
   }
 
-  /* ─── Layout ─────────────────────────────────────────────────────── */
-  main {
-    max-width: 1240px;
-    margin: 0 auto;
-    padding: 40px 32px 80px;
+  /* ═══════════════════════════════════════════════════════════════════
+     INSIGHT SECTION — derivation cards
+     ═══════════════════════════════════════════════════════════════════ */
+  .derivation-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-top: 40px;
   }
-  section {
-    margin-bottom: 56px;
-    scroll-margin-top: 24px;
+  .derivation-card {
+    background: var(--bg);
+    border-radius: var(--radius-lg);
+    padding: 36px 28px;
+    border: 1px solid var(--hairline-soft);
+    text-align: center;
+    position: relative;
+    transition: transform 0.3s var(--ease-out), box-shadow 0.3s var(--ease-out);
   }
-  section h2 {
-    color: var(--navy);
-    font-size: 26px;
-    margin: 0 0 6px;
-    font-weight: 700;
+  .derivation-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
   }
-  section h2 .num {
-    display: inline-block;
-    background: var(--navy);
-    color: var(--white);
+  .derivation-card .step-num {
     width: 36px; height: 36px;
     border-radius: 50%;
-    text-align: center;
-    line-height: 36px;
-    font-size: 18px;
-    margin-right: 12px;
-    vertical-align: middle;
-  }
-  section .lead {
-    color: var(--gray);
-    font-size: 15px;
-    margin: 0 0 22px;
-    max-width: 900px;
-  }
-  .lead .hint {
-    background: var(--pale);
-    color: var(--navy);
-    padding: 2px 7px;
-    border-radius: 3px;
+    background: var(--accent-pale);
+    color: var(--accent);
     font-weight: 600;
-    font-size: 13px;
-    white-space: nowrap;
-  }
-
-  /* ─── Panels ─────────────────────────────────────────────────────── */
-  .panel {
-    background: var(--light);
-    border-radius: 8px;
-    padding: 24px 28px;
-    box-shadow: var(--shadow);
-    border-left: 4px solid var(--blue);
-  }
-  .panel.navy  { border-left-color: var(--navy); }
-  .panel.green { border-left-color: var(--green); }
-  .panel.amber { border-left-color: var(--amber); }
-  .panel.red   { border-left-color: var(--red); }
-
-  .grid-2 {
-    display: grid;
-    grid-template-columns: 1.3fr 1fr;
-    gap: 28px;
-    align-items: start;
-  }
-  .grid-2.split {
-    grid-template-columns: 1fr 1fr;
-  }
-  .grid-side h3 {
-    color: var(--navy);
-    margin: 0 0 8px;
-    font-size: 17px;
-  }
-  .grid-side p {
-    color: var(--dark);
-    font-size: 14px;
-    margin: 0 0 14px;
-  }
-
-  /* ─── Controls ──────────────────────────────────────────────────── */
-  .control { margin-bottom: 18px; }
-  .control-label {
+    font-size: 16px;
     display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 8px;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 22px;
   }
-  .control-label .name {
+  .derivation-card .step-title {
     font-size: 12px;
-    color: var(--gray);
+    font-weight: 600;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    letter-spacing: 0.6px;
-    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 16px;
   }
-  .control-label .value {
-    font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--navy);
-    background: var(--pale);
-    padding: 2px 9px;
-    border-radius: 4px;
+  .derivation-card .step-formula {
+    font-size: 19px;
+    color: var(--ink);
+    margin-bottom: 16px;
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
-  input[type=range] {
-    width: 100%;
-    accent-color: var(--blue);
-    cursor: pointer;
-    height: 24px;
-  }
-  input[type=range]:focus-visible {
-    outline: 2px solid var(--blue);
-    outline-offset: 4px;
+  .derivation-card .step-caption {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.5;
   }
 
-  /* ─── Formula box ──────────────────────────────────────────────── */
-  .formula {
-    background: var(--pale);
-    padding: 14px 18px;
-    border-radius: 6px;
+  .insight-callout {
+    margin-top: 60px;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: white;
+    border-radius: var(--radius-lg);
+    padding: 50px 40px;
     text-align: center;
-    font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
+    box-shadow: var(--shadow-lg);
+  }
+  .insight-callout .formula {
+    font-size: clamp(28px, 4vw, 44px);
+    margin: 0 0 14px;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+  }
+  .insight-callout .caption {
     font-size: 16px;
-    color: var(--navy);
-    font-weight: 600;
-    margin: 14px 0;
-  }
-  .formula .katex { font-size: 1.1em !important; }
-  .formula .num {
-    color: var(--dark);
-    font-weight: 700;
-  }
-  .formula .small {
-    font-size: 13px;
-    color: var(--gray);
-    font-weight: 400;
+    opacity: 0.85;
     font-style: italic;
-    margin-top: 6px;
   }
 
-  /* ─── SVG plot containers ───────────────────────────────────────── */
-  .plot-wrap {
-    background: var(--white);
-    border-radius: 6px;
-    border: 1px solid #e5e7ea;
-    padding: 12px;
-    position: relative;
+  /* ═══════════════════════════════════════════════════════════════════
+     DEMO SECTION — interactive area
+     ═══════════════════════════════════════════════════════════════════ */
+  .demo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
   }
-  .plot-wrap svg {
+  .plot-card {
+    background: var(--bg);
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    border: 1px solid var(--hairline-soft);
+    box-shadow: var(--shadow-card);
+    transition: box-shadow 0.3s;
+  }
+  .plot-card:hover { box-shadow: var(--shadow-md); }
+  .plot-card.featured { border-color: var(--accent-pale); }
+  .plot-card-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .plot-card-title .name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .plot-card-title .name .badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    background: var(--bg-tint);
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+  }
+  .plot-card.featured .plot-card-title .name .badge {
+    background: var(--accent-pale);
+    color: var(--accent);
+  }
+  .plot-svg-wrap {
+    position: relative;
+    background: var(--bg-soft);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .plot-svg-wrap svg {
     display: block;
     width: 100%;
     height: auto;
     user-select: none;
     -webkit-user-select: none;
   }
-  .plot-wrap.compare {
-    border-color: var(--blue);
-  }
-  .plot-wrap .plot-title {
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--navy);
-    text-align: center;
-    margin-bottom: 4px;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-  }
-  .plot-wrap .plot-title.left { color: var(--gray); }
-  .plot-wrap .plot-title.right { color: var(--navy); }
   .plot-caption {
-    text-align: center;
-    font-size: 12px;
-    color: var(--gray);
-    font-style: italic;
-    margin-top: 6px;
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.5;
   }
+  .plot-result {
+    margin-top: 22px;
+    padding: 18px 22px;
+    border-radius: var(--radius);
+    background: var(--bg-soft);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .plot-result .label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .plot-result .pred {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .plot-result .pred.minority { color: var(--danger); }
+  .plot-result .pred.majority { color: var(--ink-dim); }
 
-  /* Animated SVG elements (line transitions when state changes) */
-  svg .anim-line { transition: x2 0.25s ease, y2 0.25s ease, stroke 0.2s, stroke-opacity 0.2s; }
-  svg .anim-dot  { transition: r 0.2s ease, stroke-width 0.2s ease; }
+  /* SVG animation + interactivity */
+  svg .anim-line {
+    transition: x2 0.25s var(--ease-out), y2 0.25s var(--ease-out),
+                stroke 0.2s, stroke-opacity 0.2s;
+  }
+  svg .anim-dot {
+    transition: r 0.2s var(--ease-out), stroke-width 0.2s var(--ease-out);
+  }
   svg .query-dot {
     cursor: grab;
-    transition: r 0.15s ease;
+    transition: r 0.15s, filter 0.2s;
+    filter: drop-shadow(0 2px 4px rgba(0, 102, 204, 0.4));
   }
   svg .query-dot:active { cursor: grabbing; }
-  svg .query-dot.dragging { r: 11; }
+  svg .query-dot.dragging {
+    r: 11;
+    filter: drop-shadow(0 4px 8px rgba(0, 102, 204, 0.5));
+  }
   svg .query-hint {
     pointer-events: none;
-    animation: pulse 1.6s ease-in-out infinite;
+    animation: pulse 1.8s ease-in-out infinite;
   }
   @keyframes pulse {
-    0%, 100% { opacity: 0.35; }
-    50%      { opacity: 0.9; }
+    0%, 100% { opacity: 0.25; transform: scale(1); }
+    50%      { opacity: 0.85; transform: scale(1.06); }
   }
-  /* Tooltip */
-  .tooltip {
-    position: fixed;
-    background: var(--dark);
-    color: var(--white);
-    padding: 6px 10px;
-    border-radius: 4px;
-    font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
-    font-size: 11px;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.15s;
-    z-index: 1000;
-    white-space: nowrap;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.25);
-  }
-  .tooltip.show { opacity: 0.95; }
 
-  /* ─── Vote tally ──────────────────────────────────────────────── */
-  .votes {
+  /* ═══════════════════════════════════════════════════════════════════
+     CONTROLS  — pill sliders, clean labels
+     ═══════════════════════════════════════════════════════════════════ */
+  .controls-row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    margin-top: 32px;
+    padding: 28px 30px;
+    background: var(--bg);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--hairline-soft);
+    box-shadow: var(--shadow-card);
+  }
+  .control {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    margin-top: 14px;
+    gap: 10px;
+  }
+  .control-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+  .control-name {
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  .control-value {
+    font-family: "SF Mono", ui-monospace, monospace;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  input[type="range"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 100%;
+    height: 4px;
+    background: var(--hairline);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  input[type="range"]:hover { background: var(--hairline-soft); }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: white;
+    border: 1px solid var(--hairline);
+    cursor: grab;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s;
+  }
+  input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+    box-shadow: var(--shadow-md);
+  }
+  input[type="range"]::-webkit-slider-thumb:active {
+    cursor: grabbing;
+    background: var(--accent);
+    border-color: var(--accent);
+    transform: scale(1.15);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: white;
+    border: 1px solid var(--hairline);
+    cursor: grab;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     PRESETS BAR
+     ═══════════════════════════════════════════════════════════════════ */
+  .presets-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-top: 28px;
+    padding: 16px 20px;
+    background: var(--bg-soft);
+    border-radius: 999px;
+    border: 1px solid var(--hairline-soft);
+  }
+  .presets-bar .label {
+    font-size: 12px;
+    color: var(--muted);
+    margin-right: 8px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .chip {
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: transparent;
+    border: 1px solid transparent;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  .chip:hover { background: white; color: var(--ink); }
+  .chip.active {
+    background: var(--ink);
+    color: white;
+    border-color: var(--ink);
+  }
+  .chip-ghost {
+    border: 1px solid var(--hairline);
+    background: white;
+    color: var(--ink);
+  }
+  .chip-ghost:hover {
+    background: var(--bg-tint);
+    border-color: var(--ink-dim);
+  }
+  .presets-bar .spacer { flex: 1; }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     ALPHA-ZOOM — single big plot
+     ═══════════════════════════════════════════════════════════════════ */
+  .zoom-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr;
+    gap: 40px;
+    align-items: center;
+  }
+  .zoom-side {
+    padding: 0 8px;
+  }
+  .zoom-side h3 {
+    font-size: 28px;
+    margin-bottom: 12px;
+  }
+  .zoom-side .desc {
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1.6;
+    margin-bottom: 28px;
+  }
+  .live-formula {
+    background: var(--bg);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    padding: 22px 26px;
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+    transition: border-color 0.3s;
+  }
+  .live-formula:hover { border-color: var(--accent-pale); }
+  .live-formula .formula-content {
+    font-size: 20px;
+    margin-bottom: 10px;
+  }
+  .live-formula .formula-note {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .live-stats {
+    margin-top: 20px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .micro-stat {
+    background: var(--bg);
+    border: 1px solid var(--hairline-soft);
+    border-radius: var(--radius);
+    padding: 14px 12px;
+    text-align: center;
+  }
+  .micro-stat .ms-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .micro-stat .ms-value {
+    font-family: "SF Mono", ui-monospace, monospace;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .micro-stat.red    .ms-value { color: var(--danger); }
+  .micro-stat.blue   .ms-value { color: var(--accent); }
+  .micro-stat.accent .ms-value { color: var(--ink); }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     VOTE TALLY
+     ═══════════════════════════════════════════════════════════════════ */
+  .vote-tally-card {
+    background: var(--bg);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--hairline-soft);
+    box-shadow: var(--shadow-card);
+    padding: 24px;
+  }
+  .vote-tally-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    font-weight: 600;
+    margin-bottom: 12px;
   }
   .vote-row {
     display: grid;
-    grid-template-columns: 36px 1fr 88px 70px;
-    gap: 10px;
+    grid-template-columns: 28px 1fr 90px 90px;
     align-items: center;
-    font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
-    font-size: 12.5px;
-    padding: 6px 10px;
-    background: var(--white);
-    border-radius: 4px;
-    border-left: 3px solid #ccc;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg-soft);
+    border-radius: var(--radius-sm);
+    margin-bottom: 4px;
+    border-left: 3px solid var(--hairline);
     cursor: pointer;
-    transition: background 0.15s, transform 0.15s;
+    transition: all 0.18s var(--ease-smooth);
+    font-family: "SF Mono", ui-monospace, monospace;
+    font-size: 12.5px;
   }
-  .vote-row:hover { background: var(--pale); transform: translateX(2px); }
-  .vote-row.minority { border-left-color: var(--red); }
-  .vote-row.majority { border-left-color: var(--blue); }
-  .vote-row .idx { color: var(--gray); font-weight: 600; }
-  .vote-row .comparison { color: var(--dark); }
-  .vote-row .winner { font-weight: 700; }
-  .vote-row .winner.min { color: var(--red); }
-  .vote-row .winner.maj { color: var(--blue); }
-  .vote-row .strength {
-    font-size: 11px;
-    color: var(--gray);
-    text-align: right;
+  .vote-row:hover {
+    transform: translateX(3px);
+    background: var(--bg-tint);
   }
+  .vote-row.minority { border-left-color: var(--danger); }
+  .vote-row.majority { border-left-color: var(--accent); }
+  .vote-row .idx { color: var(--muted); font-weight: 600; }
+  .vote-row .comparison { color: var(--ink); }
+  .vote-row .winner { font-weight: 600; }
+  .vote-row .winner.min { color: var(--danger); }
+  .vote-row .winner.maj { color: var(--accent); }
+  .vote-row .strength { color: var(--muted); font-size: 11px; text-align: right; }
 
-  /* ─── Decision callout ────────────────────────────────────────── */
-  .decision {
-    margin-top: 16px;
-    padding: 16px 20px;
-    border-radius: 6px;
-    background: var(--navy);
-    color: var(--white);
+  .vote-decision {
+    margin-top: 18px;
+    padding: 20px 24px;
+    border-radius: var(--radius);
+    background: var(--ink);
+    color: white;
     text-align: center;
-    font-weight: 700;
     transition: background 0.4s, transform 0.2s;
   }
-  .decision .label {
+  .vote-decision .label {
     font-size: 11px;
-    color: var(--pale);
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.6);
     font-weight: 600;
+    margin-bottom: 4px;
   }
-  .decision .value {
-    font-size: 22px;
-    margin-top: 4px;
+  .vote-decision .value {
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
   }
-  .decision.minority { background: var(--red); }
-  .decision.majority { background: var(--darkgray); }
-  .decision.flipped { animation: flip 0.6s ease; }
+  .vote-decision.minority { background: var(--danger); }
+  .vote-decision.majority { background: var(--ink-dim); }
+  .vote-decision.flipped { animation: flip 0.6s ease; }
   @keyframes flip {
     0%   { transform: scale(1); }
     40%  { transform: scale(1.04); }
     100% { transform: scale(1); }
   }
 
-  /* ─── Split-view comparison row ──────────────────────────────── */
-  .compare-result {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin-top: 12px;
+  /* ═══════════════════════════════════════════════════════════════════
+     INNER CV GRID
+     ═══════════════════════════════════════════════════════════════════ */
+  .cv-frame {
+    background: var(--bg);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--hairline-soft);
+    padding: 32px;
+    box-shadow: var(--shadow-card);
   }
-  .compare-result .item {
-    padding: 12px 16px;
-    border-radius: 6px;
-    text-align: center;
-    background: var(--white);
+  .cv-frame-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 24px;
   }
-  .compare-result .item.standard { border-top: 4px solid var(--gray); }
-  .compare-result .item.fair { border-top: 4px solid var(--navy); }
-  .compare-result .item .alg {
-    font-size: 11px;
-    text-transform: uppercase;
-    color: var(--gray);
-    letter-spacing: 0.5px;
-    font-weight: 600;
+  .cv-frame-header h3 {
+    font-size: 20px;
+    margin: 0;
   }
-  .compare-result .item .pred {
-    font-size: 22px;
-    font-weight: 700;
-    margin-top: 4px;
+  .cv-actions {
+    display: flex;
+    gap: 10px;
   }
-  .compare-result .item.standard .pred { color: var(--blue); }
-  .compare-result .item.fair .pred { color: var(--navy); }
-  .compare-result .item .pred.minority { color: var(--red); }
-
-  /* ─── CV grid (Section 4) ──────────────────────────────────── */
   .cv-grid-wrap {
     display: grid;
-    grid-template-columns: 80px repeat(6, 1fr);
-    gap: 4px;
-    margin: 16px 0;
+    grid-template-columns: 90px repeat(6, 1fr);
+    gap: 6px;
+    margin-bottom: 22px;
   }
   .cv-cell {
-    aspect-ratio: 1.4 / 1;
-    border-radius: 4px;
-    background: var(--white);
+    aspect-ratio: 1.5 / 1;
+    border-radius: var(--radius-sm);
+    background: var(--bg-soft);
+    border: 1px solid var(--hairline-soft);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
+    font-family: "SF Mono", ui-monospace, monospace;
     font-size: 13px;
-    color: var(--dark);
-    border: 1px solid #e5e7ea;
-    transition: all 0.4s ease;
+    color: var(--ink);
     cursor: pointer;
+    transition: all 0.35s var(--ease-out);
     position: relative;
   }
   .cv-cell.header, .cv-cell.rowhead {
-    background: var(--navy);
-    color: var(--white);
+    background: var(--ink);
+    color: white;
+    border-color: var(--ink);
     font-weight: 600;
-    border-color: var(--navy);
-    cursor: default;
     font-size: 12px;
+    cursor: default;
   }
   .cv-cell.evaluating {
-    background: var(--pale);
-    border-color: var(--blue);
-    animation: pulseLight 0.8s ease infinite;
+    background: var(--accent-tint);
+    border-color: var(--accent);
+    animation: pulse-cv 0.9s ease infinite;
   }
-  @keyframes pulseLight {
-    0%, 100% { background: var(--pale); }
-    50%      { background: #d0e1f6; }
+  @keyframes pulse-cv {
+    0%, 100% { background: var(--accent-tint); }
+    50%      { background: #d8e8f8; }
   }
-  .cv-cell.filled { background: var(--pale); border-color: var(--blue); }
+  .cv-cell.filled { background: var(--accent-tint); border-color: var(--accent-pale); }
   .cv-cell.best {
-    background: var(--navy);
-    color: var(--white);
-    border-color: var(--navy);
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
     font-weight: 700;
-    transform: scale(1.06);
-    box-shadow: var(--shadowL);
+    transform: scale(1.08);
+    box-shadow: var(--shadow-lg);
+    z-index: 2;
   }
   .cv-cell .fold-progress {
     display: flex;
-    gap: 2px;
-    margin-top: 4px;
+    gap: 3px;
+    margin-top: 5px;
     height: 4px;
   }
   .cv-cell .fold-dot {
-    width: 8px;
-    height: 4px;
-    background: #d0d4d8;
+    width: 7px; height: 4px;
+    background: var(--hairline);
     border-radius: 2px;
     transition: background 0.2s;
   }
-  .cv-cell .fold-dot.done { background: var(--blue); }
-  .cv-cell.best .fold-dot.done { background: var(--white); }
+  .cv-cell .fold-dot.done { background: var(--accent); }
+  .cv-cell.best .fold-dot.done { background: white; }
 
-  /* Fold visualisation panel */
   .fold-viz {
-    background: var(--white);
-    border-radius: 6px;
-    border: 1px solid #e5e7ea;
-    padding: 12px;
-    margin-top: 14px;
+    background: var(--bg-soft);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 18px;
+    border: 1px solid var(--hairline-soft);
   }
-  .fold-viz .fold-label {
+  .fold-viz-label {
     font-size: 11px;
-    color: var(--gray);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 6px;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 8px;
     font-weight: 600;
   }
-  .fold-viz .fold-bar {
+  .fold-bar {
     display: flex;
-    height: 24px;
-    border-radius: 4px;
+    height: 26px;
+    border-radius: var(--radius-sm);
     overflow: hidden;
-    background: #e5e7ea;
+    background: var(--hairline);
   }
-  .fold-viz .fold-segment {
+  .fold-segment {
     flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--white);
+    color: white;
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     transition: background 0.3s, opacity 0.3s;
   }
-  .fold-viz .fold-segment.train { background: var(--blue); }
-  .fold-viz .fold-segment.val   { background: var(--navy); }
-  .fold-viz .fold-segment.idle  { background: #d0d4d8; color: var(--gray); }
+  .fold-segment.train { background: var(--accent); }
+  .fold-segment.val   { background: var(--ink); }
 
-  /* ─── Pipeline ────────────────────────────────────────────── */
-  .pipeline {
-    display: grid;
-    grid-template-columns: 1fr 30px 1fr 30px 1fr 30px 1fr;
+  .cv-result-bar {
+    display: flex;
     align-items: center;
-    gap: 0;
-    margin: 24px 0;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding-top: 18px;
+    border-top: 1px solid var(--hairline-soft);
   }
-  .pipe-box {
-    background: var(--white);
-    padding: 18px 16px;
-    border-radius: 6px;
-    border-top: 4px solid var(--navy);
-    text-align: center;
-    box-shadow: var(--shadow);
+  .cv-result-text {
+    font-family: "SF Mono", ui-monospace, monospace;
+    font-size: 13px;
+    color: var(--muted);
   }
-  .pipe-box .step {
-    font-size: 11px;
-    color: var(--gray);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    font-weight: 700;
-    margin-bottom: 6px;
-  }
-  .pipe-box .title {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--navy);
-    margin-bottom: 6px;
-  }
-  .pipe-box .detail {
-    font-size: 12px;
-    color: var(--gray);
-    font-style: italic;
-  }
-  .pipe-arrow {
-    text-align: center;
-    color: var(--navy);
-    font-size: 22px;
-    font-weight: 700;
-  }
-
-  /* ─── Stats ────────────────────────────────────────────────── */
-  .stats-grid {
+  .cv-winners {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    margin-top: 12px;
+    gap: 10px;
+    margin-top: 22px;
   }
-  .stat {
-    background: var(--white);
-    padding: 12px 14px;
-    border-radius: 6px;
+
+  /* ═══════════════════════════════════════════════════════════════════
+     PIPELINE
+     ═══════════════════════════════════════════════════════════════════ */
+  .pipeline {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
+    align-items: stretch;
+    gap: 0;
+  }
+  .pipe-step {
+    background: var(--bg);
+    padding: 32px 24px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--hairline-soft);
     text-align: center;
-    border-left: 3px solid var(--navy);
+    box-shadow: var(--shadow-card);
+    transition: transform 0.3s var(--ease-out), box-shadow 0.3s var(--ease-out);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
-  .stat .label {
-    font-size: 11px;
-    color: var(--gray);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+  .pipe-step:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-md);
+  }
+  .pipe-step .pipe-num {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--accent-pale);
+    color: var(--accent);
     font-weight: 600;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
   }
-  .stat .value {
-    font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--navy);
-    margin-top: 4px;
-    transition: color 0.3s;
+  .pipe-step .pipe-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 8px;
   }
-
-  /* ─── Footer ───────────────────────────────────────────────── */
-  footer {
-    background: var(--navy);
-    color: var(--pale);
-    padding: 28px 48px;
+  .pipe-step .pipe-detail {
     font-size: 13px;
-    text-align: center;
-    border-top: 4px solid var(--blue);
+    color: var(--muted);
+    line-height: 1.5;
   }
-  footer strong { color: var(--white); }
-  footer a { color: var(--blue); text-decoration: none; }
-  footer a:hover { text-decoration: underline; }
+  .pipe-arrow {
+    align-self: center;
+    color: var(--hairline);
+    font-size: 22px;
+    padding: 0 8px;
+  }
 
-  /* ─── Buttons ─────────────────────────────────────────────── */
-  button {
-    background: var(--navy);
-    color: var(--white);
-    border: none;
-    padding: 10px 22px;
+  /* ═══════════════════════════════════════════════════════════════════
+     RESULTS — Apple-style table
+     ═══════════════════════════════════════════════════════════════════ */
+  .results-card {
+    background: var(--bg);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--hairline-soft);
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
+  }
+  .results-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  .results-table thead {
+    background: var(--ink);
+    color: white;
+  }
+  .results-table th {
+    text-align: left;
+    padding: 16px 22px;
     font-size: 12px;
     font-weight: 600;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background 0.2s, transform 0.1s;
-    font-family: inherit;
   }
-  button:hover { background: var(--blue); }
-  button:active { transform: translateY(1px); }
-  button.outline {
-    background: transparent;
-    color: var(--white);
-    border: 2px solid var(--pale);
-    padding: 8px 18px;
+  .results-table th:not(:first-child) { text-align: center; }
+  .results-table td {
+    padding: 16px 22px;
+    border-bottom: 1px solid var(--hairline-soft);
+    color: var(--ink);
   }
-  button.outline:hover { background: var(--pale); color: var(--navy); border-color: var(--pale); }
-  button.preset {
-    background: transparent;
-    color: var(--pale);
-    border: 1px solid rgba(231, 240, 250, 0.4);
-    padding: 6px 14px;
-    font-size: 11px;
+  .results-table tr:last-child td { border-bottom: none; }
+  .results-table tr.highlight td:nth-child(2),
+  .results-table tr.highlight td:nth-child(3),
+  .results-table tr.highlight td:nth-child(4) {
+    background: var(--accent-tint);
   }
-  button.preset:hover { background: var(--pale); color: var(--navy); }
-  button.preset.active { background: var(--pale); color: var(--navy); border-color: var(--pale); }
+  .results-table td:not(:first-child) {
+    text-align: center;
+    font-family: "SF Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  .results-table td.champion {
+    background: var(--accent);
+    color: white;
+    font-weight: 700;
+  }
+  .results-table td.algo {
+    font-weight: 500;
+  }
+  .results-table td.algo.featured {
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .table-note {
+    padding: 18px 22px;
+    background: var(--bg-soft);
+    color: var(--muted);
+    font-size: 13px;
+    font-style: italic;
+    text-align: center;
+  }
 
-  button.solid-light {
-    background: var(--navy);
-    color: var(--white);
-    border: 1px solid var(--navy);
+  /* ═══════════════════════════════════════════════════════════════════
+     METHODOLOGY  — Apple-style spec list
+     ═══════════════════════════════════════════════════════════════════ */
+  .spec-list {
+    background: var(--bg);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--hairline-soft);
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
   }
-  button.solid-light:hover { background: var(--blue); border-color: var(--blue); }
-
-  /* ─── Tour overlay (when playing) ─────────────────────────── */
-  body.touring section { transition: opacity 0.4s, transform 0.4s; }
-  body.touring section.focus {
-    transform: scale(1.0);
+  .spec-row {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 24px;
+    padding: 22px 28px;
+    border-bottom: 1px solid var(--hairline-soft);
+    align-items: start;
   }
-  body.touring section:not(.focus) {
-    opacity: 0.35;
-  }
-  .tour-banner {
-    position: fixed;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--navy);
-    color: var(--white);
-    padding: 12px 24px;
-    border-radius: 24px;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.25);
-    z-index: 999;
+  .spec-row:last-child { border-bottom: none; }
+  .spec-row .spec-label {
     font-size: 13px;
     font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+  .spec-row .spec-value {
+    color: var(--ink);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .spec-row .spec-value strong {
+    font-weight: 600;
+  }
+  .spec-row .spec-value code {
+    background: var(--bg-tint);
+    padding: 1px 7px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     VARIANTS  — algorithm family showcase
+     ═══════════════════════════════════════════════════════════════════ */
+  .variants-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+  }
+  .variant-card {
+    background: var(--bg);
+    border-radius: var(--radius);
+    border: 1px solid var(--hairline-soft);
+    padding: 22px 18px;
+    transition: all 0.3s var(--ease-out);
+  }
+  .variant-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--accent-pale);
+  }
+  .variant-card .v-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 8px;
+    letter-spacing: -0.01em;
+  }
+  .variant-card .v-desc {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+  .variant-card.featured {
+    background: linear-gradient(180deg, var(--accent-deep), var(--accent));
+    border-color: transparent;
+    color: white;
+  }
+  .variant-card.featured .v-name { color: white; }
+  .variant-card.featured .v-desc { color: rgba(255,255,255,0.85); }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     OUTCOMES  — bottom hero with big stats
+     ═══════════════════════════════════════════════════════════════════ */
+  .outcomes {
+    background: var(--ink);
+    color: white;
+    padding: 130px 0 100px;
+    text-align: center;
+  }
+  .outcomes-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 40px;
+    margin-top: 70px;
+  }
+  .outcome-block .o-num {
+    font-size: clamp(56px, 8vw, 88px);
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    background: linear-gradient(135deg, #5aa3ff, #ffffff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .outcome-block .o-label {
+    margin-top: 18px;
+    font-size: 14px;
+    color: rgba(255,255,255,0.6);
+    line-height: 1.5;
+  }
+  .outcome-block .o-detail {
+    margin-top: 6px;
+    font-size: 13px;
+    color: rgba(255,255,255,0.5);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     KEY CONTRIBUTIONS  (4-card grid)
+     ═══════════════════════════════════════════════════════════════════ */
+  .contrib-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+  }
+  .contrib-card {
+    background: var(--bg);
+    border-radius: var(--radius-lg);
+    padding: 36px 32px;
+    border: 1px solid var(--hairline-soft);
+    box-shadow: var(--shadow-card);
+    position: relative;
+    transition: transform 0.35s var(--ease-out),
+                box-shadow 0.35s var(--ease-out),
+                border-color 0.35s var(--ease-out);
+  }
+  .contrib-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--accent-pale);
+  }
+  .contrib-card .contrib-icon {
+    width: 48px; height: 48px;
+    background: var(--accent-pale);
+    color: var(--accent);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 22px;
+  }
+  .contrib-card .contrib-num {
+    position: absolute;
+    top: 28px; right: 32px;
+    font-family: "SF Mono", ui-monospace, monospace;
+    font-size: 13px;
+    color: var(--hairline);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .contrib-card .contrib-title {
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: -0.015em;
+    margin-bottom: 10px;
+    line-height: 1.3;
+  }
+  .contrib-card .contrib-text {
+    font-size: 14.5px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     DECISION LIST  (3 callouts)
+     ═══════════════════════════════════════════════════════════════════ */
+  .decision-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .decision-row {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    gap: 28px;
+    background: var(--bg);
+    border-radius: var(--radius-lg);
+    padding: 32px 36px;
+    border: 1px solid var(--hairline-soft);
+    box-shadow: var(--shadow-card);
+    transition: transform 0.3s var(--ease-out), box-shadow 0.3s var(--ease-out);
+  }
+  .decision-row:hover {
+    transform: translateX(4px);
+    box-shadow: var(--shadow-md);
+  }
+  .decision-marker {
+    width: 48px; height: 48px;
+    background: var(--ink);
+    color: white;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600;
+    font-size: 19px;
+    letter-spacing: -0.02em;
+  }
+  .decision-body h3 {
+    font-size: 18px;
+    margin-bottom: 8px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .decision-body p {
+    font-size: 14.5px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .decision-body code {
+    background: var(--bg-tint);
+    padding: 1px 7px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     FLOATING BACK-TO-TOP BUTTON
+     ═══════════════════════════════════════════════════════════════════ */
+  .back-to-top {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(29, 29, 31, 0.92);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: white;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-lg);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(20px);
+    transition: opacity 0.3s, transform 0.3s var(--ease-out), background 0.2s;
+    z-index: 98;
+  }
+  .back-to-top.visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+  .back-to-top:hover {
+    background: var(--accent);
+    transform: translateY(-2px);
+  }
+  .back-to-top svg { transition: transform 0.2s; }
+  .back-to-top:hover svg { transform: translateY(-2px); }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     TOOLTIPS, TOUR BANNER
+     ═══════════════════════════════════════════════════════════════════ */
+  .tooltip {
+    position: fixed;
+    background: var(--ink);
+    color: white;
+    padding: 7px 11px;
+    border-radius: 6px;
+    font-family: "SF Mono", ui-monospace, monospace;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+    white-space: nowrap;
+    box-shadow: var(--shadow-lg);
+  }
+  .tooltip.show { opacity: 1; }
+
+  .tour-banner {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(29, 29, 31, 0.92);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    color: white;
+    padding: 14px 22px 14px 24px;
+    border-radius: 999px;
+    z-index: 999;
+    font-size: 13px;
+    font-weight: 500;
     display: none;
     align-items: center;
-    gap: 14px;
+    gap: 16px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.08);
   }
   body.touring .tour-banner { display: flex; }
   .tour-banner button {
     padding: 5px 14px;
-    font-size: 11px;
+    font-size: 12px;
+    background: rgba(255,255,255,0.15);
+    border: none;
+    color: white;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 500;
+    transition: background 0.2s;
+  }
+  .tour-banner button:hover { background: rgba(255,255,255,0.25); }
+
+  body.touring section { transition: opacity 0.4s; }
+  body.touring section:not(.focus) { opacity: 0.35; }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     FOOTER
+     ═══════════════════════════════════════════════════════════════════ */
+  footer {
+    background: var(--bg-tint);
+    color: var(--muted);
+    padding: 60px 0 40px;
+    border-top: 1px solid var(--hairline-soft);
+  }
+  footer .container { text-align: center; }
+  footer .credits {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  footer .credits strong { color: var(--ink); font-weight: 600; }
+  footer .authors {
+    margin-top: 18px;
+    font-size: 13px;
+    color: var(--muted-2);
+  }
+  footer .meta {
+    margin-top: 28px;
+    padding-top: 24px;
+    border-top: 1px solid var(--hairline-soft);
+    font-size: 12px;
+    color: var(--muted-2);
   }
 
-  /* ─── Responsive ─────────────────────────────────────────── */
-  @media (max-width: 980px) {
-    .grid-2 { grid-template-columns: 1fr; }
-    .grid-2.split { grid-template-columns: 1fr; }
-    .cv-grid-wrap { grid-template-columns: 60px repeat(6, 1fr); }
-    .pipeline { grid-template-columns: 1fr; gap: 12px; }
-    .pipe-arrow { transform: rotate(90deg); }
+  /* ═══════════════════════════════════════════════════════════════════
+     SCROLL ANIMATIONS — fade up on intersection
+     ═══════════════════════════════════════════════════════════════════ */
+  .reveal {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.7s var(--ease-out), transform 0.7s var(--ease-out);
   }
-  @media (max-width: 600px) {
-    header { padding: 24px 20px 20px; }
-    header h1 { font-size: 28px; }
-    main { padding: 24px 16px 60px; }
-    section { margin-bottom: 40px; }
-    section h2 { font-size: 21px; }
-    .panel { padding: 16px 18px; }
-    .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
-    .stat .value { font-size: 16px; }
-    .vote-row {
-      grid-template-columns: 28px 1fr 70px;
-      font-size: 11px;
-    }
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .reveal-delay-1 { transition-delay: 0.08s; }
+  .reveal-delay-2 { transition-delay: 0.16s; }
+  .reveal-delay-3 { transition-delay: 0.24s; }
+  .reveal-delay-4 { transition-delay: 0.32s; }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     RESPONSIVE
+     ═══════════════════════════════════════════════════════════════════ */
+  @media (max-width: 980px) {
+    section { padding: 80px 0; }
+    .hero { padding: 80px 0 60px; }
+    .contrib-grid { grid-template-columns: 1fr; }
+    .decision-row { grid-template-columns: 48px 1fr; gap: 18px; padding: 24px; }
+    .hero-scroll-hint { display: none; }
+    .back-to-top { bottom: 20px; right: 20px; width: 40px; height: 40px; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 32px; }
+    .problem-grid { grid-template-columns: 1fr; gap: 40px; }
+    .derivation-grid { grid-template-columns: 1fr; }
+    .demo-grid { grid-template-columns: 1fr; }
+    .controls-row { grid-template-columns: 1fr; gap: 18px; }
+    .zoom-grid { grid-template-columns: 1fr; gap: 32px; }
+    .pipeline { grid-template-columns: 1fr; gap: 12px; }
+    .pipe-arrow { display: none; }
+    .variants-grid { grid-template-columns: repeat(2, 1fr); }
+    .outcomes-grid { grid-template-columns: 1fr; gap: 32px; }
+    .nav-links { display: none; }
+    .results-table { font-size: 13px; }
+    .results-table th, .results-table td { padding: 12px 14px; }
+    .spec-row { grid-template-columns: 1fr; gap: 6px; }
+    .cv-grid-wrap { grid-template-columns: 60px repeat(6, 1fr); }
+    .cv-cell { font-size: 11px; }
+  }
+  @media (max-width: 560px) {
+    .container, .container-narrow { padding: 0 20px; }
+    .nav-inner { padding: 0 20px; gap: 14px; }
+    .hero-title { font-size: 44px; }
+    .hero-subtitle { font-size: 17px; }
+    .stats-grid { grid-template-columns: 1fr 1fr; }
+    .stat-block .num { font-size: 36px; }
+    .section-head h2 { font-size: 30px; }
+    .variants-grid { grid-template-columns: 1fr; }
+    .vote-row { grid-template-columns: 24px 1fr 70px; }
     .vote-row .strength { display: none; }
-    .cv-grid-wrap { grid-template-columns: 44px repeat(6, 1fr); gap: 3px; }
-    .cv-cell { font-size: 10px; }
-    .compare-result { grid-template-columns: 1fr; }
-    footer { padding: 20px 16px; }
-    input[type=range] { height: 30px; } /* bigger touch target */
+    .presets-bar { padding: 12px 14px; border-radius: var(--radius-lg); }
+    .cv-frame { padding: 20px; }
   }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="kicker">INTERACTIVE ILLUSTRATION  ·  CC2008  ·  Machine Learning I</div>
-  <h1>KNNFairRankJointCV</h1>
-  <p class="subtitle">A Poisson-derived rank correction for class imbalance, with joint
-     cross-validation over correction strength (α) and vote count. <strong>Drag the query
-     in any plot</strong>; everything updates live.</p>
-
-  <div class="header-actions">
-    <button id="btn-tour" class="solid-light">▶  Play guided tour</button>
-    <span class="label">Presets:</span>
-    <button class="preset" data-preset="mild">Mild  IR=2</button>
-    <button class="preset active" data-preset="standard">Standard  IR=8</button>
-    <button class="preset" data-preset="severe">Severe  IR=40</button>
-    <button class="preset" data-preset="boundary">Boundary case</button>
-    <span style="flex: 1;"></span>
-    <button id="btn-reset" class="outline">Reset state</button>
+<!-- ═══════════════════════════════════════════════════════════════════
+     STICKY NAV
+     ═══════════════════════════════════════════════════════════════════ -->
+<header class="topnav">
+  <div class="nav-inner">
+    <a href="#" class="nav-brand">KNNFairRank</a>
+    <nav class="nav-links">
+      <a href="#problem">Problem</a>
+      <a href="#insight">Insight</a>
+      <a href="#demo">Demo</a>
+      <a href="#search">Inner&nbsp;CV</a>
+      <a href="#results">Results</a>
+      <a href="#about">About</a>
+    </nav>
+    <button class="nav-cta" id="btn-tour">▶ Guided tour</button>
   </div>
 </header>
 
-<main>
+<!-- ═══════════════════════════════════════════════════════════════════
+     HERO  — cinematic intro with subtle animated background
+     ═══════════════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="hero-bg-glow"></div>
+  <div class="container">
+    <p class="hero-eyebrow reveal visible">CC2008  ·  Machine Learning I  ·  University of Porto  ·  2025/26</p>
+    <h1 class="hero-title reveal visible">
+      A correction to<br>
+      the oldest <span class="accent">classifier.</span>
+    </h1>
+    <p class="hero-subtitle reveal visible reveal-delay-1">
+      KNN was always biased under class imbalance. We derived the fix
+      from Poisson order statistics &mdash; and proved it on 49 datasets.
+    </p>
+    <div class="hero-ctas reveal visible reveal-delay-2">
+      <a href="#demo" class="btn btn-primary">
+        Try it interactively
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="margin-left: 2px;">
+          <path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+      <a href="#results" class="btn btn-secondary">See the numbers</a>
+    </div>
+    <div class="hero-scroll-hint reveal visible reveal-delay-3" aria-hidden="true">
+      <span>Scroll to explore</span>
+      <div class="scroll-line"></div>
+    </div>
+  </div>
+</section>
 
-<!-- ─────────────────────────────────────────────────────────────────── -->
-<!-- SECTION 1 — Split view: Standard KNN vs FairRank                    -->
-<!-- ─────────────────────────────────────────────────────────────────── -->
-<section id="section-1">
-  <h2><span class="num">1</span> Standard KNN  vs  KNNFairRank — live</h2>
-  <p class="lead">
-    Two views of the <strong>same</strong> data and the <strong>same</strong> query —
-    only the comparison rule differs. <span class="hint">Drag the navy query point</span>
-    across the plots to see when the two classifiers diverge. The standard KNN almost
-    always picks majority because the majority cloud is denser; FairRank corrects for
-    this by comparing rank-1 minority against rank-<em>k<sub>eff</sub></em> majority.
-  </p>
+<!-- ═══════════════════════════════════════════════════════════════════
+     STATS STRIP
+     ═══════════════════════════════════════════════════════════════════ -->
+<div class="stats-strip">
+  <div class="stats-grid">
+    <div class="stat-block accent-num reveal">
+      <div class="num">+0.88</div>
+      <div class="label">Cohen's <em>d</em> in G-Mean<br>vs the principled KNN baseline</div>
+    </div>
+    <div class="stat-block reveal reveal-delay-1">
+      <div class="num">49<small> ds</small></div>
+      <div class="label">Datasets benchmarked under<br>5×10-fold stratified CV</div>
+    </div>
+    <div class="stat-block reveal reveal-delay-2">
+      <div class="num">+0.77</div>
+      <div class="label">Spearman ρ — empirical confirmation<br>of the theoretical mechanism</div>
+    </div>
+    <div class="stat-block reveal reveal-delay-3">
+      <div class="num">10<sup>−4</sup></div>
+      <div class="label">Holm-corrected <em>p</em>-value<br>vs SMOTE+KNN on ROC-AUC</div>
+    </div>
+  </div>
+</div>
 
-  <div class="panel navy">
-    <div class="grid-2 split">
-      <div>
-        <div class="plot-wrap">
-          <div class="plot-title left">Standard KNN</div>
+<!-- ═══════════════════════════════════════════════════════════════════
+     SECTION  ·  PROBLEM
+     ═══════════════════════════════════════════════════════════════════ -->
+<section id="problem">
+  <div class="container">
+    <div class="section-head reveal">
+      <p class="eyebrow">The problem</p>
+      <h2>It's not your <span class="accent">k</span>. It's the comparison.</h2>
+      <p class="lede">
+        Standard KNN compares the nearest minority distance against the nearest majority
+        distance. Under unequal sampling, this comparison is biased by construction —
+        no choice of <em>k</em> can undo it.
+      </p>
+    </div>
+
+    <div class="problem-grid">
+      <div class="problem-text reveal">
+        <h2 style="font-size: 30px; margin-bottom: 18px;">The structural bias</h2>
+        <p>
+          Under a homogeneous Poisson sampling model, the expected distance to the
+          <em>k</em>-th nearest neighbour of a class scales with that class's local
+          density. Equal densities, unequal sample sizes → the rarer class always
+          sits farther away — purely by sampling.
+        </p>
+        <div class="formula-card">
+          <div class="formula-label">Poisson scaling law</div>
+          <div class="formula-body" id="formula-poisson">
+            E[d<sub>k</sub><sup>c</sup>]  ∝  (k / λ<sub>c</sub>)<sup>1/d</sup>
+          </div>
+          <div class="formula-note">
+            At rank 1: ratio = r<sup>1/d</sup>, where r = N<sub>maj</sub>/N<sub>min</sub>
+          </div>
+        </div>
+      </div>
+      <div class="problem-visual reveal reveal-delay-1">
+        <!-- Hero visualization here -->
+        <div class="plot-card">
+          <div class="plot-svg-wrap">
+            <svg viewBox="0 0 600 360" id="svg-hero"></svg>
+          </div>
+          <p class="plot-caption">
+            Two clouds, same underlying density. The majority just has more points —
+            so it always sits closer to any query, regardless of <em>k</em>.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SECTION  ·  INSIGHT
+     ═══════════════════════════════════════════════════════════════════ -->
+<section id="insight" class="tinted">
+  <div class="container">
+    <div class="section-head reveal">
+      <p class="eyebrow">The insight</p>
+      <h2>The math <span class="accent">cancels</span> the dimension.</h2>
+      <p class="lede">
+        Equate the expected rank-1 minority distance with the expected
+        rank-<em>k</em><sub>eff</sub> majority distance. Solve. Dimension
+        <em>d</em> falls out. What remains is closed-form and parameter-free.
+      </p>
+    </div>
+
+    <div class="derivation-grid">
+      <div class="derivation-card reveal">
+        <div class="step-num">1</div>
+        <div class="step-title">Poisson scaling</div>
+        <div class="step-formula">E[d<sub>k</sub><sup>c</sup>] ∝ (k / λ<sub>c</sub>)<sup>1/d</sup></div>
+        <div class="step-caption">Standard result for k-th order statistic of a Poisson process.</div>
+      </div>
+      <div class="derivation-card reveal reveal-delay-1">
+        <div class="step-num">2</div>
+        <div class="step-title">Equate expectations</div>
+        <div class="step-formula">E[d<sub>k<sub>eff</sub></sub><sup>maj</sup>] = E[d<sub>1</sub><sup>min</sup>]</div>
+        <div class="step-caption">Find the majority rank that produces a fair rank-1 comparison.</div>
+      </div>
+      <div class="derivation-card reveal reveal-delay-2">
+        <div class="step-num">3</div>
+        <div class="step-title">Dimension cancels</div>
+        <div class="step-formula"><strong>k<sub>eff</sub> = r</strong></div>
+        <div class="step-caption">No hyperparameter, no dimension estimate. Just <em>r</em> = N<sub>maj</sub>/N<sub>min</sub>.</div>
+      </div>
+    </div>
+
+    <div class="insight-callout reveal reveal-delay-2">
+      <p class="formula">Compare  d<sub>1</sub><sup>min</sup>  with  d<sub>r</sub><sup>maj</sup></p>
+      <p class="caption">Instead of  d<sub>1</sub><sup>min</sup>  with  d<sub>1</sub><sup>maj</sup>  —  accounts for sampling-induced density imbalance.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SECTION  ·  DEMO  ·  split view
+     ═══════════════════════════════════════════════════════════════════ -->
+<section id="demo">
+  <div class="container">
+    <div class="section-head reveal">
+      <p class="eyebrow">See it for yourself</p>
+      <h2>Two views.<br>Same data. <span class="accent">Different rules.</span></h2>
+      <p class="lede">
+        Drag the navy query point. Standard KNN almost always votes majority — because
+        majority is denser. KNNFairRank compensates by shifting the majority rank to <em>r</em>.
+      </p>
+    </div>
+
+    <div class="demo-grid reveal">
+      <div class="plot-card">
+        <div class="plot-card-title">
+          <span class="name">Standard KNN <span class="badge">biased</span></span>
+        </div>
+        <div class="plot-svg-wrap">
           <svg viewBox="0 0 600 360" id="svg-standard"></svg>
-          <div class="plot-caption">Compares  d₁ᵐⁱⁿ  vs  d₁ᵐᵃʲ  (rank 1 on both classes)</div>
+        </div>
+        <p class="plot-caption">Compares  d<sub>1</sub><sup>min</sup>  vs  d<sub>1</sub><sup>maj</sup>  (rank 1 on both classes)</p>
+        <div class="plot-result">
+          <span class="label">Predicts</span>
+          <span class="pred" id="pred-standard">—</span>
         </div>
       </div>
-      <div>
-        <div class="plot-wrap compare">
-          <div class="plot-title right">KNNFairRank</div>
+      <div class="plot-card featured">
+        <div class="plot-card-title">
+          <span class="name">KNNFairRank <span class="badge">fair</span></span>
+        </div>
+        <div class="plot-svg-wrap">
           <svg viewBox="0 0 600 360" id="svg-fair"></svg>
-          <div class="plot-caption">Compares  d₁ᵐⁱⁿ  vs  d<sub>k<sub>eff</sub></sub>ᵐᵃʲ  (rank shifted by r)</div>
+        </div>
+        <p class="plot-caption">Compares  d<sub>1</sub><sup>min</sup>  vs  d<sub>k<sub>eff</sub></sub><sup>maj</sup>  (majority rank shifted by r)</p>
+        <div class="plot-result">
+          <span class="label">Predicts</span>
+          <span class="pred" id="pred-fair">—</span>
         </div>
       </div>
     </div>
 
-    <div class="compare-result">
-      <div class="item standard">
-        <div class="alg">Standard KNN says</div>
-        <div class="pred" id="pred-standard">—</div>
+    <div class="controls-row reveal reveal-delay-1">
+      <div class="control">
+        <div class="control-header">
+          <span class="control-name">Imbalance ratio  r   (changes N<sub>min</sub>)</span>
+          <span class="control-value" id="ir-val">8</span>
+        </div>
+        <input type="range" id="ir-slider" min="2" max="40" value="8" aria-label="Imbalance ratio">
       </div>
-      <div class="item fair">
-        <div class="alg">KNNFairRank says</div>
-        <div class="pred" id="pred-fair">—</div>
+      <div class="control">
+        <div class="control-header">
+          <span class="control-name">α   (only affects FairRank)</span>
+          <span class="control-value" id="alpha1-val">0.75</span>
+        </div>
+        <input type="range" id="alpha1-slider" min="0" max="100" value="75" aria-label="Correction strength alpha">
       </div>
     </div>
 
-    <div class="grid-2" style="margin-top: 22px;">
-      <div>
-        <div class="control">
-          <div class="control-label">
-            <span class="name">Imbalance ratio  r  (varies N_min)</span>
-            <span class="value" id="ir-val">8</span>
+    <div class="presets-bar reveal reveal-delay-2">
+      <span class="label">Scenarios</span>
+      <button class="chip" data-preset="mild">Mild  ·  r = 2</button>
+      <button class="chip active" data-preset="standard">Standard  ·  r = 8</button>
+      <button class="chip" data-preset="severe">Severe  ·  r = 40</button>
+      <button class="chip" data-preset="boundary">Boundary case</button>
+      <div class="spacer"></div>
+      <button class="chip chip-ghost" id="btn-reset">Reset</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SECTION  ·  α controls k_eff (zoom in)
+     ═══════════════════════════════════════════════════════════════════ -->
+<section id="correction" class="tinted">
+  <div class="container">
+    <div class="section-head reveal">
+      <p class="eyebrow">The correction strength</p>
+      <h2 id="math-keff-title"><span id="math-keff"></span></h2>
+      <p class="lede">
+        α dampens the correction when minorities are clustered — the most common
+        violation of the Poisson assumption.
+        <strong>α = 1</strong> applies full correction;
+        <strong>α = 0</strong> recovers standard KNN.
+      </p>
+    </div>
+
+    <div class="zoom-grid">
+      <div class="reveal">
+        <div class="plot-card">
+          <div class="plot-card-title">
+            <span class="name">α drives k<sub>eff</sub></span>
           </div>
-          <input type="range" id="ir-slider" min="2" max="40" value="8"
-                 aria-label="Imbalance ratio">
+          <div class="plot-svg-wrap">
+            <svg viewBox="0 0 600 360" id="svg-alpha"></svg>
+          </div>
+          <p class="plot-caption">
+            Blue line connects the query to the <em>k</em><sub>eff</sub>-th nearest
+            majority. Drag the query or move the slider.
+          </p>
         </div>
       </div>
-      <div>
-        <div class="control">
-          <div class="control-label">
-            <span class="name">α  (only affects FairRank)</span>
-            <span class="value" id="alpha1-val">0.75</span>
+
+      <div class="zoom-side reveal reveal-delay-1">
+        <h3>Tune the rank shift.</h3>
+        <p class="desc">
+          Empirically, the optimal α is usually below 1 — minority clusters
+          violate the homogeneous-Poisson assumption, and a milder correction
+          performs better.
+        </p>
+
+        <div class="control" style="margin-bottom: 24px;">
+          <div class="control-header">
+            <span class="control-name">α   correction strength</span>
+            <span class="control-value" id="alpha2-val">0.75</span>
           </div>
-          <input type="range" id="alpha1-slider" min="0" max="100" value="75"
-                 aria-label="Correction strength alpha">
+          <input type="range" id="alpha2-slider" min="0" max="100" value="75" aria-label="Alpha section 2">
+        </div>
+
+        <div class="live-formula">
+          <div class="formula-content" id="formula-keff"></div>
+          <div class="formula-note">
+            With r = <span id="alpha-r-current">8</span>:  α=1 → k<sub>eff</sub>=<span id="keff-1">8</span>  ·  α=0.5 → k<sub>eff</sub>=<span id="keff-half">3</span>  ·  α=0 → k<sub>eff</sub>=1
+          </div>
+        </div>
+
+        <div class="live-stats">
+          <div class="micro-stat red">
+            <div class="ms-label">d<sub>1</sub><sup>min</sup></div>
+            <div class="ms-value" id="d-min-val">—</div>
+          </div>
+          <div class="micro-stat blue">
+            <div class="ms-label">d<sub>k<sub>eff</sub></sub><sup>maj</sup></div>
+            <div class="ms-value" id="d-maj-val">—</div>
+          </div>
+          <div class="micro-stat accent">
+            <div class="ms-label">Predict</div>
+            <div class="ms-value" id="closer-val">—</div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ─────────────────────────────────────────────────────────────────── -->
-<!-- SECTION 2 — α controls k_eff                                         -->
-<!-- ─────────────────────────────────────────────────────────────────── -->
-<section id="section-2">
-  <h2><span class="num">2</span> The correction:  <span id="math-keff"></span></h2>
-  <p class="lead">
-    Zoom in on the formula. α scales the majority rank we compare against:
-    <span class="hint">α = 1 → full correction k<sub>eff</sub> = r</span>,
-    <span class="hint">α = 0 → no correction (rank 1)</span>. Empirically the optimal α
-    is usually below 1 because minority clusters violate the homogeneous-Poisson assumption.
-  </p>
+<!-- ═══════════════════════════════════════════════════════════════════
+     SECTION  ·  multi-vote
+     ═══════════════════════════════════════════════════════════════════ -->
+<section id="vote">
+  <div class="container">
+    <div class="section-head reveal">
+      <p class="eyebrow">The multi-vote scheme</p>
+      <h2>One vote is noisy. <span class="accent">Many votes converge.</span></h2>
+      <p class="lede">
+        Cast <em>n_votes</em> rank-corrected comparisons; predict minority if more
+        than half favour it. Hover any tally row to spotlight its pair of points.
+      </p>
+    </div>
 
-  <div class="panel">
-    <div class="grid-2">
-      <div class="plot-wrap">
-        <svg viewBox="0 0 600 360" id="svg-alpha"></svg>
-        <div class="plot-caption">
-          The blue line connects the query to the k<sub>eff</sub>-th nearest majority.
+    <div class="zoom-grid">
+      <div class="reveal">
+        <div class="plot-card">
+          <div class="plot-card-title">
+            <span class="name" id="vote-section-name">Multi-vote</span>
+          </div>
+          <div class="plot-svg-wrap">
+            <svg viewBox="0 0 600 360" id="svg-vote"></svg>
+          </div>
+          <p class="plot-caption">
+            Each pair of lines is one vote: vote<sub>i</sub> = [&thinsp;d<sub>i</sub><sup>min</sup>
+            &lt; d<sub>i·k<sub>eff</sub></sub><sup>maj</sup>&thinsp;].
+          </p>
         </div>
       </div>
 
-      <div class="grid-side">
-        <div class="control">
-          <div class="control-label">
-            <span class="name">α  (correction strength)</span>
-            <span class="value" id="alpha2-val">0.75</span>
+      <div class="zoom-side reveal reveal-delay-1">
+        <h3>Aggregate evidence.</h3>
+        <p class="desc">
+          A rank-1 comparison is fragile. Stacking <em>n_votes</em> independent
+          rank-corrected comparisons reduces variance — and the final decision
+          becomes a vote fraction, naturally giving a probability score.
+        </p>
+
+        <div class="control" style="margin-bottom: 18px;">
+          <div class="control-header">
+            <span class="control-name">n_votes</span>
+            <span class="control-value" id="nv-val">5</span>
           </div>
-          <input type="range" id="alpha2-slider" min="0" max="100" value="75"
-                 aria-label="Correction strength alpha section 2">
+          <input type="range" id="nv-slider" min="1" max="10" value="5" aria-label="n_votes">
         </div>
 
-        <div class="formula">
-          <div id="formula-keff"></div>
-          <div class="small">
-            With r = <span id="alpha-r-current">8</span>:
-            α=1 → k<sub>eff</sub>=<span id="keff-1">8</span>  ·
-            α=0.5 → k<sub>eff</sub>=<span id="keff-half">3</span>  ·
-            α=0 → k<sub>eff</sub>=1
+        <div class="control" style="margin-bottom: 22px;">
+          <div class="control-header">
+            <span class="control-name">α   (synced)</span>
+            <span class="control-value" id="alpha3-val">0.75</span>
           </div>
+          <input type="range" id="alpha3-slider" min="0" max="100" value="75" aria-label="Alpha section 3">
         </div>
 
-        <div class="stats-grid">
-          <div class="stat" style="border-left-color: var(--red);">
-            <div class="label">d₁ᵐⁱⁿ</div>
-            <div class="value" id="d-min-val" style="color: var(--red);">—</div>
-          </div>
-          <div class="stat" style="border-left-color: var(--blue);">
-            <div class="label">d<sub>kₑff</sub>ᵐᵃʲ</div>
-            <div class="value" id="d-maj-val" style="color: var(--blue);">—</div>
-          </div>
-          <div class="stat" style="border-left-color: var(--navy);">
-            <div class="label">Closer  →  predict</div>
-            <div class="value" id="closer-val">—</div>
+        <div class="vote-tally-card">
+          <div class="vote-tally-title">Tally</div>
+          <div id="vote-tally"></div>
+          <div id="vote-decision" class="vote-decision">
+            <div class="label">Vote fraction</div>
+            <div class="value" id="decision-text">—</div>
           </div>
         </div>
       </div>
@@ -828,203 +1988,495 @@
   </div>
 </section>
 
-<!-- ─────────────────────────────────────────────────────────────────── -->
-<!-- SECTION 3 — multi-vote                                               -->
-<!-- ─────────────────────────────────────────────────────────────────── -->
-<section id="section-3">
-  <h2><span class="num">3</span> The multi-vote:  <span id="math-multivote"></span></h2>
-  <p class="lead">
-    A single rank-1 comparison is noisy. KNNFairRank casts
-    <strong>n_votes</strong> rank-corrected comparisons and votes by majority.
-    <span class="hint">Hover a row in the tally</span> to highlight the corresponding
-    pair of points in the plot.
-  </p>
-
-  <div class="panel green">
-    <div class="grid-2">
-      <div class="plot-wrap">
-        <svg viewBox="0 0 600 360" id="svg-vote"></svg>
-        <div class="plot-caption">
-          Each pair of lines is one vote at rank i.  Vote → minority if  d<sub>i</sub>ᵐⁱⁿ &lt; d<sub>i·k<sub>eff</sub></sub>ᵐᵃʲ.
-        </div>
-      </div>
-
-      <div class="grid-side">
-        <div class="control">
-          <div class="control-label">
-            <span class="name">n_votes  (comparisons)</span>
-            <span class="value" id="nv-val">5</span>
-          </div>
-          <input type="range" id="nv-slider" min="1" max="10" value="5"
-                 aria-label="Number of votes">
-        </div>
-
-        <div class="control">
-          <div class="control-label">
-            <span class="name">α  (synced across sections)</span>
-            <span class="value" id="alpha3-val">0.75</span>
-          </div>
-          <input type="range" id="alpha3-slider" min="0" max="100" value="75"
-                 aria-label="Correction strength alpha section 3">
-        </div>
-
-        <div id="vote-tally" class="votes"></div>
-
-        <div id="vote-decision" class="decision">
-          <div class="label">Vote fraction</div>
-          <div class="value" id="decision-text">—</div>
-        </div>
-      </div>
+<!-- ═══════════════════════════════════════════════════════════════════
+     SECTION  ·  inner CV search
+     ═══════════════════════════════════════════════════════════════════ -->
+<section id="search" class="tinted">
+  <div class="container">
+    <div class="section-head reveal">
+      <p class="eyebrow">The data-driven choice</p>
+      <h2>Pick <span class="accent">(α*, n_votes*)</span><br>from the data itself.</h2>
+      <p class="lede">
+        KNNFairRankJointCV runs an inner stratified 3-fold CV over a grid of
+        4 α × 6 n_votes = 24 pairs. The pair with the highest mean fold score wins.
+      </p>
     </div>
-  </div>
-</section>
 
-<!-- ─────────────────────────────────────────────────────────────────── -->
-<!-- SECTION 4 — joint CV                                                 -->
-<!-- ─────────────────────────────────────────────────────────────────── -->
-<section id="section-4">
-  <h2><span class="num">4</span> Joint CV — pick (α*, n_votes*) from data</h2>
-  <p class="lead">
-    KNNFairRankJointCV does <strong>inner stratified 3-fold cross-validation</strong>
-    over the full grid of <strong>4 α × 6 n_votes = 24 pairs</strong>. For each pair,
-    average G-Mean over 3 folds; commit to the argmax.
-    <span class="hint">Click "Run inner CV"</span> to animate the 72 fold evaluations
-    (24 cells × 3 folds), with the active fold-split shown below.
-  </p>
-
-  <div class="panel amber">
-    <div class="grid-side">
-      <h3>Inner CV grid  —  mean G-Mean over 3 folds</h3>
+    <div class="cv-frame reveal">
+      <div class="cv-frame-header">
+        <h3>Inner CV  ·  G-Mean averaged over 3 folds</h3>
+        <div class="cv-actions">
+          <button class="btn btn-primary" id="cv-run">Run inner CV</button>
+          <button class="btn btn-secondary" id="cv-reset">Reset</button>
+        </div>
+      </div>
 
       <div class="cv-grid-wrap" id="cv-grid"></div>
 
       <div class="fold-viz" id="fold-viz" style="display: none;">
-        <div class="fold-label" id="fold-current-label">— current fold —</div>
+        <div class="fold-viz-label" id="fold-current-label">— current fold —</div>
         <div class="fold-bar" id="fold-bar"></div>
       </div>
 
-      <div style="display: flex; gap: 12px; margin-top: 16px; align-items: center; flex-wrap: wrap;">
-        <button id="cv-run">Run inner CV</button>
-        <button id="cv-reset" class="solid-light">Reset</button>
-        <div style="flex: 1;"></div>
-        <div id="cv-result" style="font-family: 'SF Mono', monospace; font-size: 13px; color: var(--gray);">
-          Awaiting search…
-        </div>
+      <div class="cv-result-bar">
+        <div class="cv-result-text" id="cv-result">Click <strong>Run inner CV</strong> to evaluate 24 cells × 3 folds.</div>
       </div>
 
-      <div class="stats-grid" style="margin-top: 18px;">
-        <div class="stat">
-          <div class="label">α* selected</div>
-          <div class="value" id="alpha-star">—</div>
+      <div class="cv-winners">
+        <div class="micro-stat accent">
+          <div class="ms-label">α* selected</div>
+          <div class="ms-value" id="alpha-star">—</div>
         </div>
-        <div class="stat">
-          <div class="label">n_votes* selected</div>
-          <div class="value" id="nv-star">—</div>
+        <div class="micro-stat accent">
+          <div class="ms-label">n_votes* selected</div>
+          <div class="ms-value" id="nv-star">—</div>
         </div>
-        <div class="stat">
-          <div class="label">Best G-Mean</div>
-          <div class="value" id="gmean-star">—</div>
+        <div class="micro-stat accent">
+          <div class="ms-label">Best G-Mean</div>
+          <div class="ms-value" id="gmean-star">—</div>
         </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ─────────────────────────────────────────────────────────────────── -->
-<!-- SECTION 5 — Pipeline                                                 -->
-<!-- ─────────────────────────────────────────────────────────────────── -->
-<section id="section-5">
-  <h2><span class="num">5</span> The complete pipeline</h2>
-  <p class="lead">
-    Five stages from training data to a prediction. The efficiency trick: α only
-    affects prediction, not the neighbourhood structure — so we fit once per
-    (fold, n_votes) and sweep all α values cheaply on the same fitted model.
-  </p>
+<!-- ═══════════════════════════════════════════════════════════════════
+     SECTION  ·  pipeline
+     ═══════════════════════════════════════════════════════════════════ -->
+<section id="pipeline">
+  <div class="container">
+    <div class="section-head reveal">
+      <p class="eyebrow">End to end</p>
+      <h2>Training to prediction. <span class="accent">In five steps.</span></h2>
+      <p class="lede">
+        The efficiency trick: α affects only inference, not the neighbourhood
+        structure. So we fit once per (fold, n_votes) and sweep all α values
+        on the same fitted model.
+      </p>
+    </div>
 
-  <div class="pipeline">
-    <div class="pipe-box">
-      <div class="step">Input</div>
-      <div class="title">(X, y), r</div>
-      <div class="detail">imbalance r = N_maj / N_min</div>
-    </div>
-    <div class="pipe-arrow">→</div>
-    <div class="pipe-box">
-      <div class="step">Search</div>
-      <div class="title">24 pairs × 3 folds</div>
-      <div class="detail">α ∈ {0.25, 0.5, 0.75, 1}<br>n_votes ∈ {1, 2, 3, 5, 7, 10}</div>
-    </div>
-    <div class="pipe-arrow">→</div>
-    <div class="pipe-box">
-      <div class="step">Select</div>
-      <div class="title">argmax G-Mean</div>
-      <div class="detail">best (α*, n_votes*) by mean fold score</div>
-    </div>
-    <div class="pipe-arrow">→</div>
-    <div class="pipe-box">
-      <div class="step">Predict</div>
-      <div class="title">multi-vote</div>
-      <div class="detail">d<sub>i</sub>ᵐⁱⁿ &lt; d<sub>i·k<sub>eff</sub></sub>ᵐᵃʲ for i=1..n_votes*</div>
-    </div>
-  </div>
-
-  <div class="panel" style="margin-top: 28px;">
-    <h3 style="color: var(--navy); margin-top: 0;">Result on the project benchmark</h3>
-    <div class="stats-grid">
-      <div class="stat">
-        <div class="label">G-Mean (40 datasets)</div>
-        <div class="value">0.799</div>
+    <div class="pipeline">
+      <div class="pipe-step reveal">
+        <div class="pipe-num">1</div>
+        <div class="pipe-title">Input</div>
+        <div class="pipe-detail">(X, y), r&nbsp;=&nbsp;N<sub>maj</sub>/N<sub>min</sub></div>
       </div>
-      <div class="stat">
-        <div class="label">vs KNNOptK · Cohen's d</div>
-        <div class="value" style="color: var(--green);">+0.88</div>
+      <div class="pipe-arrow">›</div>
+      <div class="pipe-step reveal reveal-delay-1">
+        <div class="pipe-num">2</div>
+        <div class="pipe-title">Search</div>
+        <div class="pipe-detail">24 pairs × 3 folds<br>α ∈ {0.25 … 1}<br>n_votes ∈ {1 … 10}</div>
       </div>
-      <div class="stat">
-        <div class="label">vs KNNOptK · p_holm</div>
-        <div class="value">&lt; 10⁻⁴</div>
+      <div class="pipe-arrow">›</div>
+      <div class="pipe-step reveal reveal-delay-2">
+        <div class="pipe-num">3</div>
+        <div class="pipe-title">Select</div>
+        <div class="pipe-detail">argmax mean G-Mean<br>over the 3 inner folds</div>
+      </div>
+      <div class="pipe-arrow">›</div>
+      <div class="pipe-step reveal reveal-delay-3">
+        <div class="pipe-num">4</div>
+        <div class="pipe-title">Predict</div>
+        <div class="pipe-detail">multi-vote at chosen<br>(α*, n_votes*)</div>
       </div>
     </div>
   </div>
 </section>
 
-</main>
+<!-- ═══════════════════════════════════════════════════════════════════
+     SECTION  ·  family of variants
+     ═══════════════════════════════════════════════════════════════════ -->
+<section id="family" class="tinted">
+  <div class="container">
+    <div class="section-head reveal">
+      <p class="eyebrow">The family</p>
+      <h2>Five variants. <span class="accent">One mechanism.</span></h2>
+      <p class="lede">
+        Each one explores a different bias–variance trade-off on top of the
+        same Poisson-derived core.
+      </p>
+    </div>
 
-<div class="tour-banner" id="tour-banner">
-  <span id="tour-msg">Tour playing…</span>
-  <button id="tour-stop" class="outline">Stop</button>
-</div>
+    <div class="variants-grid">
+      <div class="variant-card reveal">
+        <div class="v-name">KNNFairRank</div>
+        <div class="v-desc">Core — fixed k<sub>eff</sub> = r, closed-form. The theoretical baseline.</div>
+      </div>
+      <div class="variant-card reveal reveal-delay-1">
+        <div class="v-name">KNNFairRankCV</div>
+        <div class="v-desc">Tunes α in k<sub>eff</sub> = r<sup>α</sup> via inner CV. Handles cluster violations.</div>
+      </div>
+      <div class="variant-card featured reveal reveal-delay-2">
+        <div class="v-name">KNNFairRankJointCV ★</div>
+        <div class="v-desc">Joint (α, n_votes) search. Champion of threshold metrics — G-Mean, MCC.</div>
+      </div>
+      <div class="variant-card reveal reveal-delay-3">
+        <div class="v-name">KNNFairRankEnsemble</div>
+        <div class="v-desc">Averages votes over full grid. Smooth scores → ranking metric winner.</div>
+      </div>
+      <div class="variant-card reveal reveal-delay-4">
+        <div class="v-name">KNNFairRankJackknife</div>
+        <div class="v-desc">LOO over minority ranks. Variance reduction for small N<sub>min</sub>.</div>
+      </div>
+    </div>
+  </div>
+</section>
 
-<div class="tooltip" id="tooltip"></div>
+<!-- ═══════════════════════════════════════════════════════════════════
+     SECTION  ·  results table
+     ═══════════════════════════════════════════════════════════════════ -->
+<section id="results">
+  <div class="container-narrow">
+    <div class="section-head reveal">
+      <p class="eyebrow">Validation</p>
+      <h2>10 algorithms. 40 datasets. <span class="accent">50 splits each.</span></h2>
+      <p class="lede">
+        Demšar 2006 protocol — Friedman global test, post-hoc Wilcoxon signed-rank with
+        Holm correction, paired Cohen's d effect sizes, bootstrap CIs.
+        Champion cells highlighted.
+      </p>
+    </div>
 
-<footer>
-  <strong>KNN Variants for Class Imbalance</strong>  ·  Machine Learning I (CC2008)  ·  University of Porto  ·  2025/2026<br>
-  Duarte Gomes (up202409386)  ·  José Sousa (up202405046)  ·  Tiago Sousa (up202405406)
+    <div class="results-card reveal">
+      <table class="results-table">
+        <thead>
+          <tr>
+            <th>Algorithm</th>
+            <th>G-Mean</th>
+            <th>ROC-AUC</th>
+            <th>MCC</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="highlight">
+            <td class="algo featured">KNNFairRankJointCV ★</td>
+            <td class="champion">0.799</td>
+            <td>0.871</td>
+            <td class="champion">0.531</td>
+          </tr>
+          <tr class="highlight">
+            <td class="algo featured">KNNFairRankEnsemble ★</td>
+            <td>0.781</td>
+            <td class="champion">0.878</td>
+            <td>0.516</td>
+          </tr>
+          <tr>
+            <td class="algo">KNNFairRankCV</td>
+            <td>0.788</td>
+            <td>0.870</td>
+            <td>0.527</td>
+          </tr>
+          <tr>
+            <td class="algo">KNNFairRankOptVotes</td>
+            <td>0.785</td>
+            <td>0.866</td>
+            <td>0.522</td>
+          </tr>
+          <tr>
+            <td class="algo">KNNFairRank</td>
+            <td>0.775</td>
+            <td>0.860</td>
+            <td>0.510</td>
+          </tr>
+          <tr>
+            <td class="algo">KNNFairRankJackknife</td>
+            <td>0.772</td>
+            <td>0.872</td>
+            <td>0.510</td>
+          </tr>
+          <tr>
+            <td class="algo">SMOTE+KNN</td>
+            <td>0.755</td>
+            <td>0.844</td>
+            <td>0.482</td>
+          </tr>
+          <tr>
+            <td class="algo">KNNWeighted</td>
+            <td>0.689</td>
+            <td>0.812</td>
+            <td>0.420</td>
+          </tr>
+          <tr>
+            <td class="algo">KNNOptK <span style="font-weight:400; color: var(--muted);">(baseline)</span></td>
+            <td>0.673</td>
+            <td>0.840</td>
+            <td>0.440</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="table-note">
+        JointCV wins threshold metrics (decision quality).  Ensemble wins the ranking
+        metric (probability quality).  Both significantly beat KNNOptK and SMOTE+KNN
+        after Holm correction.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SECTION  ·  KEY CONTRIBUTIONS  (4-card grid)
+     ═══════════════════════════════════════════════════════════════════ -->
+<section id="contributions" class="tinted">
+  <div class="container">
+    <div class="section-head reveal">
+      <p class="eyebrow">Our contributions</p>
+      <h2>Four things that make this <span class="accent">our work.</span></h2>
+      <p class="lede">
+        We did not just implement KNN variants for class imbalance.
+        We derived an original correction from first principles, validated it
+        at scale, and produced the theory-data link that closes the loop.
+      </p>
+    </div>
+
+    <div class="contrib-grid">
+      <div class="contrib-card reveal">
+        <div class="contrib-icon">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 1018 0 9 9 0 00-18 0z"/>
+            <path d="M12 7v10M7 12h10"/>
+          </svg>
+        </div>
+        <div class="contrib-num">01</div>
+        <h3 class="contrib-title">Original correction, derived not heuristic</h3>
+        <p class="contrib-text">
+          k<sub>eff</sub> = r emerges from Poisson order statistics in three lines &mdash;
+          no free parameters, no dimension estimate. Closed-form and parameter-free.
+        </p>
+      </div>
+
+      <div class="contrib-card reveal reveal-delay-1">
+        <div class="contrib-icon">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="16" rx="2"/>
+            <path d="M3 10h18M9 4v16"/>
+          </svg>
+        </div>
+        <div class="contrib-num">02</div>
+        <h3 class="contrib-title">Rigorous experimental validation</h3>
+        <p class="contrib-text">
+          49 datasets &times; 50 splits &times; 10 algorithms. The full Demsar 2006
+          protocol with Friedman, Wilcoxon-Holm, Cohen&rsquo;s d and bootstrap CIs.
+        </p>
+      </div>
+
+      <div class="contrib-card reveal reveal-delay-2">
+        <div class="contrib-icon">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 17l6-6 4 4 8-8"/>
+            <path d="M14 7h7v7"/>
+          </svg>
+        </div>
+        <div class="contrib-num">03</div>
+        <h3 class="contrib-title">Statistically significant gains</h3>
+        <p class="contrib-text">
+          Cohen&rsquo;s d = +0.88 vs KNNOptK (large effect). Beats SMOTE+KNN on
+          ROC-AUC with Holm-corrected p &lt; 10<sup>&minus;4</sup>. Universal: 85% win rate.
+        </p>
+      </div>
+
+      <div class="contrib-card reveal reveal-delay-3">
+        <div class="contrib-icon">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M8 12l3 3 5-6"/>
+          </svg>
+        </div>
+        <div class="contrib-num">04</div>
+        <h3 class="contrib-title">Theory ↔ data link</h3>
+        <p class="contrib-text">
+          Spearman &rho; = +0.77 between borderline_fraction and our G-Mean gain &mdash;
+          FairRank helps <em>exactly</em> where the structural bias is strongest.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SECTION  ·  TECHNICAL DECISIONS  (3 callouts)
+     ═══════════════════════════════════════════════════════════════════ -->
+<section id="decisions">
+  <div class="container-narrow">
+    <div class="section-head reveal">
+      <p class="eyebrow">Decisions we owned</p>
+      <h2>Three calls that shaped <span class="accent">the work.</span></h2>
+    </div>
+
+    <div class="decision-list">
+      <div class="decision-row reveal">
+        <div class="decision-marker">A</div>
+        <div class="decision-body">
+          <h3>No sklearn KNN in the core loop</h3>
+          <p>The course constraint required <em>no scikit-learn</em> for the KNN itself.
+             We adapted the loop from <code>rushter/MLAlgorithms</code>, kept it pure NumPy/SciPy,
+             then added a vectorised <code>scipy.cdist</code> path that is bit-for-bit identical
+             but much faster.</p>
+        </div>
+      </div>
+
+      <div class="decision-row reveal reveal-delay-1">
+        <div class="decision-marker">B</div>
+        <div class="decision-body">
+          <h3>Screen 27 candidates before benchmarking 10</h3>
+          <p>Running a 1-rep screening on 27 algorithms first let us identify four
+             conceptual families that were dominated or redundant, keeping the
+             final benchmark scientifically focused at 10 algorithms.
+             Budget saved: ~6&times; the compute time.</p>
+        </div>
+      </div>
+
+      <div class="decision-row reveal reveal-delay-2">
+        <div class="decision-marker">C</div>
+        <div class="decision-body">
+          <h3>Separate the 9 degenerate datasets</h3>
+          <p>Datasets with N<sub>min</sub> &lt; 20 break stratified 10-fold CV (test
+             folds with zero positives &rarr; G-Mean undefined). We moved them to
+             a descriptive annex so they don&rsquo;t pollute the main statistical battery.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SECTION  ·  methodology snapshot
+     ═══════════════════════════════════════════════════════════════════ -->
+<section id="methodology" class="tinted">
+  <div class="container-narrow">
+    <div class="section-head reveal">
+      <p class="eyebrow">Methodology</p>
+      <h2>Built to <span class="accent">survive scrutiny.</span></h2>
+      <p class="lede">
+        Every number on this page was generated from a single canonical CSV
+        (benchmark_5rep.csv, 24,500 rows) with a fully seeded pipeline.
+      </p>
+    </div>
+
+    <div class="spec-list reveal">
+      <div class="spec-row">
+        <div class="spec-label">Datasets</div>
+        <div class="spec-value"><strong>49 binary imbalanced datasets</strong>  ·  40 non-degenerate in the main analysis  ·  9 degenerate (N<sub>min</sub> &lt; 20) separated to a descriptive-only annex</div>
+      </div>
+      <div class="spec-row">
+        <div class="spec-label">Cross-validation</div>
+        <div class="spec-value"><strong>5 repetitions × 10-fold StratifiedKFold</strong> = 50 evaluation splits per pair  ·  3-fold inner CV for (α, n_votes) tuning  ·  parallelised over 8 cores</div>
+      </div>
+      <div class="spec-row">
+        <div class="spec-label">Metrics</div>
+        <div class="spec-value"><strong>Threshold</strong>: G-Mean, MCC, F1  ·  <strong>Ranking</strong>: ROC-AUC, PR-AUC  ·  computed from raw confusion-matrix counts (extensible without re-running)</div>
+      </div>
+      <div class="spec-row">
+        <div class="spec-label">Hyperparameters</div>
+        <div class="spec-value"><code>α ∈ {0.25, 0.50, 0.75, 1.00}</code>  ·  <code>n_votes ∈ {1, 2, 3, 5, 7, 10}</code></div>
+      </div>
+      <div class="spec-row">
+        <div class="spec-label">Statistical battery</div>
+        <div class="spec-value"><strong>Demšar 2006 protocol</strong>: Friedman global → Wilcoxon signed-rank (Holm) → Cohen's d paired → Nemenyi critical difference</div>
+      </div>
+      <div class="spec-row">
+        <div class="spec-label">Reproducibility</div>
+        <div class="spec-value">Single random seed <code>42</code> in <code>config/settings.yaml</code>  ·  all results from <code>results/tables/benchmark_5rep.csv</code></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SECTION  ·  outcomes (dark hero close)
+     ═══════════════════════════════════════════════════════════════════ -->
+<section id="outcomes" class="outcomes">
+  <div class="container">
+    <div class="reveal">
+      <p class="eyebrow" style="color: #5aa3ff;">The result</p>
+      <h2 style="font-size: clamp(36px, 6vw, 60px); margin-bottom: 18px;">
+        Theory and data, <span style="background: linear-gradient(135deg, #5aa3ff, #ffffff); -webkit-background-clip: text; background-clip: text; color: transparent;">finally aligned.</span>
+      </h2>
+      <p class="muted-text" style="font-size: 19px; max-width: 760px; margin: 0 auto;">
+        The structural-bias prediction from §2 isn't just elegant — it
+        empirically determines where KNNFairRank helps and where it doesn't.
+      </p>
+    </div>
+
+    <div class="outcomes-grid">
+      <div class="outcome-block reveal">
+        <div class="o-num">+0.88</div>
+        <div class="o-label">Cohen's <em>d</em> in G-Mean</div>
+        <div class="o-detail">vs the principled baseline (KNNOptK)</div>
+      </div>
+      <div class="outcome-block reveal reveal-delay-1">
+        <div class="o-num">+0.77</div>
+        <div class="o-label">Spearman ρ — borderline_fraction</div>
+        <div class="o-detail">FairRank helps exactly where the bias is largest</div>
+      </div>
+      <div class="outcome-block reveal reveal-delay-2">
+        <div class="o-num">85%</div>
+        <div class="o-label">win rate vs the baseline</div>
+        <div class="o-detail">across all 40 non-degenerate datasets</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     FOOTER
+     ═══════════════════════════════════════════════════════════════════ -->
+<footer id="about">
+  <div class="container">
+    <div class="credits"><strong>KNN Variants for Class Imbalance</strong></div>
+    <div class="authors">
+      Built at <strong>Faculdade de Ciências, Universidade do Porto</strong>  ·  Machine Learning I (CC2008)  ·  2025/2026
+    </div>
+    <div class="authors" style="margin-top: 10px;">
+      Duarte Gomes (up202409386)  ·  José Sousa (up202405046)  ·  Tiago Sousa (up202405406)
+    </div>
+    <div class="meta">
+      Interactive demo · all data and computations seeded for full reproducibility.
+    </div>
+  </div>
 </footer>
 
+<!-- Floating overlays: tour banner, back-to-top, tooltip -->
+<div class="tour-banner" id="tour-banner">
+  <span id="tour-msg">Tour playing…</span>
+  <button id="tour-stop">Stop</button>
+</div>
+<button class="back-to-top" id="back-to-top" aria-label="Back to top">
+  <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 12V4M4 8l4-4 4 4"/>
+  </svg>
+</button>
+<div class="tooltip" id="tooltip"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     JAVASCRIPT
+     ═══════════════════════════════════════════════════════════════════ -->
 <script>
 (function () {
   "use strict";
 
-  // ─── Palette mirror (matches CSS) ──────────────────────────────────
   const PAL = {
-    NAVY:  "#003D7A",
-    BLUE:  "#0d6efd",
-    PALE:  "#E7F0FA",
-    LIGHT: "#F8F9FA",
-    GRAY:  "#6C757D",
-    DARK:  "#212939",
-    WHITE: "#FFFFFF",
-    GREEN: "#10824D",
-    RED:   "#C0392B",
-    AMBER: "#D98216"
+    NAVY:    "#003D7A",
+    ACCENT:  "#0066cc",
+    BLUE:    "#0066cc",
+    PALE:    "#e6f0fa",
+    BG:      "#ffffff",
+    BG_SOFT: "#fbfbfd",
+    BG_TINT: "#f5f5f7",
+    INK:     "#1d1d1f",
+    MUTED:   "#6e6e73",
+    HAIR:    "#d2d2d7",
+    RED:     "#d93025",
+    GREEN:   "#1d9d4d",
+    AMBER:   "#d97e00"
   };
 
-  // ─── State ─────────────────────────────────────────────────────────
+  // ═══ State ════════════════════════════════════════════════════════
   const W = 600, H = 360;
   const state = {
     query: { x: 310, y: 180 },
     alpha: 0.75,
     n_votes: 5,
-    IR: 8,                  // integer 2..40, controls N_min
+    IR: 8,
     seed: 42,
     minoritySigma: 35,
     minorityCx: 420,
@@ -1037,13 +2489,13 @@
   };
 
   const PRESETS = {
-    mild:     { IR: 2,  query: {x: 310, y: 180}, minoritySigma: 70, minorityCx: 400 },
+    mild:     { IR: 2,  query: {x: 310, y: 180}, minoritySigma: 70, minorityCx: 380 },
     standard: { IR: 8,  query: {x: 310, y: 180}, minoritySigma: 35, minorityCx: 420 },
     severe:   { IR: 40, query: {x: 310, y: 180}, minoritySigma: 25, minorityCx: 430 },
     boundary: { IR: 8,  query: {x: 310, y: 180}, minoritySigma: 35, minorityCx: 420 }
   };
 
-  // ─── PRNG + data generation ────────────────────────────────────────
+  // ═══ PRNG + data ══════════════════════════════════════════════════
   function mulberry32(seed) {
     return function () {
       seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
@@ -1057,10 +2509,8 @@
     return mean + std * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
   }
 
-  // Majority is fixed (regen only on preset change); minority regenerates on IR change.
   let majority = [];
   let minority = [];
-
   function regenerateMajority() {
     const rng = mulberry32(state.seed);
     majority = [];
@@ -1085,24 +2535,15 @@
   regenerateMajority();
   regenerateMinority();
 
-  // ─── Distance helpers ──────────────────────────────────────────────
   function dist(a, b) {
     const dx = a.x - b.x, dy = a.y - b.y;
     return Math.sqrt(dx * dx + dy * dy);
   }
-  function sortedDistances() {
-    const dMaj = majority.map((p, i) => ({ ...p, d: dist(p, state.query), origIdx: i }))
-                          .sort((a, b) => a.d - b.d);
-    const dMin = minority.map((p, i) => ({ ...p, d: dist(p, state.query), origIdx: i }))
-                          .sort((a, b) => a.d - b.d);
-    return { dMaj, dMin };
-  }
-
   function calcKeff(alpha, r) {
     return Math.max(1, Math.round(Math.pow(r, alpha)));
   }
 
-  // ─── SVG helpers ──────────────────────────────────────────────────
+  // ═══ SVG helpers ══════════════════════════════════════════════════
   const SVGNS = "http://www.w3.org/2000/svg";
   function svgEl(name, attrs) {
     const el = document.createElementNS(SVGNS, name);
@@ -1113,145 +2554,112 @@
     while (svg.firstChild) svg.removeChild(svg.firstChild);
   }
 
-  // Tooltip (single global element)
   const tooltipEl = document.getElementById("tooltip");
   function showTooltip(text, x, y) {
     tooltipEl.textContent = text;
     tooltipEl.style.left = (x + 12) + "px";
-    tooltipEl.style.top = (y - 28) + "px";
+    tooltipEl.style.top = (y - 30) + "px";
     tooltipEl.classList.add("show");
   }
-  function hideTooltip() {
-    tooltipEl.classList.remove("show");
-  }
+  function hideTooltip() { tooltipEl.classList.remove("show"); }
 
-  // Draws background grid + all dots into a target SVG.
-  // Returns the query <circle> element (used by drag setup).
+  // ── Master plot renderer ─────────────────────────────────────────
   function renderPlot(svgId, options = {}) {
     const svg = document.getElementById(svgId);
+    if (!svg) return { sortedMaj: [], sortedMin: [] };
     clearSvg(svg);
     const {
       highlightMajIdx = [],
       highlightMinIdx = [],
       drawQuery = true,
-      showHint = false
+      showHint = false,
+      showLegend = true
     } = options;
 
-    // Background grid (very subtle)
+    // Soft background grid
     for (let gx = 0; gx <= W; gx += 100) {
       svg.appendChild(svgEl("line", {
-        x1: gx, y1: 0, x2: gx, y2: H,
-        stroke: "#f0f2f4", "stroke-width": 1
+        x1: gx, y1: 0, x2: gx, y2: H, stroke: "#eaeaea", "stroke-width": 0.6
       }));
     }
     for (let gy = 0; gy <= H; gy += 100) {
       svg.appendChild(svgEl("line", {
-        x1: 0, y1: gy, x2: W, y2: gy,
-        stroke: "#f0f2f4", "stroke-width": 1
+        x1: 0, y1: gy, x2: W, y2: gy, stroke: "#eaeaea", "stroke-width": 0.6
       }));
     }
 
-    // ── Majority dots
     const sortedMaj = majority.map((p, i) => ({ ...p, d: dist(p, state.query), origIdx: i }))
                               .sort((a, b) => a.d - b.d);
-    const rankOfMaj = {};
-    sortedMaj.forEach((p, r) => { rankOfMaj[p.origIdx] = r + 1; });
+    const sortedMin = minority.map((p, i) => ({ ...p, d: dist(p, state.query), origIdx: i }))
+                              .sort((a, b) => a.d - b.d);
+
+    const rankOfMaj = {}; sortedMaj.forEach((p, r) => { rankOfMaj[p.origIdx] = r + 1; });
+    const rankOfMin = {}; sortedMin.forEach((p, r) => { rankOfMin[p.origIdx] = r + 1; });
+
     majority.forEach((p, i) => {
       const isHi = highlightMajIdx.includes(i);
-      const r = isHi ? 7 : 4;
+      const r = isHi ? 7 : 3.8;
       const dot = svgEl("circle", {
         cx: p.x, cy: p.y, r: r,
-        fill: PAL.BLUE,
-        stroke: isHi ? PAL.NAVY : PAL.WHITE,
-        "stroke-width": isHi ? 2.5 : 1,
+        fill: PAL.ACCENT, "fill-opacity": isHi ? 1 : 0.85,
+        stroke: isHi ? PAL.NAVY : "white",
+        "stroke-width": isHi ? 2.5 : 0.8,
         class: "anim-dot"
       });
-      const ttRank = rankOfMaj[i];
-      const ttD = dist(p, state.query);
-      dot.addEventListener("mouseenter", (e) => {
-        showTooltip(`majority · rank ${ttRank} · d=${ttD.toFixed(1)}`, e.clientX, e.clientY);
-      });
-      dot.addEventListener("mousemove", (e) => {
-        tooltipEl.style.left = (e.clientX + 12) + "px";
-        tooltipEl.style.top = (e.clientY - 28) + "px";
-      });
+      const ttRank = rankOfMaj[i]; const ttD = dist(p, state.query);
+      dot.addEventListener("mouseenter", (e) => showTooltip(`majority · rank ${ttRank} · d=${ttD.toFixed(1)}`, e.clientX, e.clientY));
+      dot.addEventListener("mousemove", (e) => { tooltipEl.style.left = (e.clientX + 12) + "px"; tooltipEl.style.top = (e.clientY - 30) + "px"; });
       dot.addEventListener("mouseleave", hideTooltip);
       svg.appendChild(dot);
     });
 
-    // ── Minority dots (on top of majority)
-    const sortedMin = minority.map((p, i) => ({ ...p, d: dist(p, state.query), origIdx: i }))
-                              .sort((a, b) => a.d - b.d);
-    const rankOfMin = {};
-    sortedMin.forEach((p, r) => { rankOfMin[p.origIdx] = r + 1; });
     minority.forEach((p, i) => {
       const isHi = highlightMinIdx.includes(i);
       const r = isHi ? 8 : 5.5;
       const dot = svgEl("circle", {
         cx: p.x, cy: p.y, r: r,
         fill: PAL.RED,
-        stroke: isHi ? PAL.NAVY : PAL.WHITE,
+        stroke: isHi ? PAL.NAVY : "white",
         "stroke-width": isHi ? 2.5 : 1.2,
         class: "anim-dot"
       });
-      const ttRank = rankOfMin[i];
-      const ttD = dist(p, state.query);
-      dot.addEventListener("mouseenter", (e) => {
-        showTooltip(`minority · rank ${ttRank} · d=${ttD.toFixed(1)}`, e.clientX, e.clientY);
-      });
-      dot.addEventListener("mousemove", (e) => {
-        tooltipEl.style.left = (e.clientX + 12) + "px";
-        tooltipEl.style.top = (e.clientY - 28) + "px";
-      });
+      const ttRank = rankOfMin[i]; const ttD = dist(p, state.query);
+      dot.addEventListener("mouseenter", (e) => showTooltip(`minority · rank ${ttRank} · d=${ttD.toFixed(1)}`, e.clientX, e.clientY));
+      dot.addEventListener("mousemove", (e) => { tooltipEl.style.left = (e.clientX + 12) + "px"; tooltipEl.style.top = (e.clientY - 30) + "px"; });
       dot.addEventListener("mouseleave", hideTooltip);
       svg.appendChild(dot);
     });
 
-    // ── Query
     let queryDot = null;
     if (drawQuery) {
-      // Optional pulsing hint ring
       if (showHint) {
         const ring = svgEl("circle", {
-          cx: state.query.x, cy: state.query.y, r: 16,
-          fill: "none",
-          stroke: PAL.NAVY, "stroke-width": 2,
-          "stroke-dasharray": "3 3",
-          class: "query-hint"
+          cx: state.query.x, cy: state.query.y, r: 17,
+          fill: "none", stroke: PAL.ACCENT, "stroke-width": 1.5,
+          "stroke-dasharray": "3 3", class: "query-hint"
         });
         svg.appendChild(ring);
       }
       queryDot = svgEl("circle", {
         cx: state.query.x, cy: state.query.y, r: 9,
-        fill: PAL.NAVY, stroke: PAL.WHITE, "stroke-width": 2.5,
+        fill: PAL.NAVY, stroke: "white", "stroke-width": 2.5,
         class: "query-dot"
       });
       svg.appendChild(queryDot);
     }
 
-    // ── Legend
-    const lx = W - 130, ly = 18;
-    svg.appendChild(svgEl("circle", { cx: lx, cy: ly, r: 5, fill: PAL.BLUE }));
-    const t1 = svgEl("text", {
-      x: lx + 10, y: ly + 4,
-      "font-family": "system-ui, sans-serif",
-      "font-size": "11", fill: PAL.DARK
-    }); t1.textContent = `majority (${majority.length})`;
-    svg.appendChild(t1);
-    svg.appendChild(svgEl("circle", { cx: lx, cy: ly + 18, r: 6, fill: PAL.RED }));
-    const t2 = svgEl("text", {
-      x: lx + 10, y: ly + 22,
-      "font-family": "system-ui, sans-serif",
-      "font-size": "11", fill: PAL.DARK
-    }); t2.textContent = `minority (${minority.length})`;
-    svg.appendChild(t2);
-    svg.appendChild(svgEl("circle", { cx: lx, cy: ly + 36, r: 6.5, fill: PAL.NAVY }));
-    const t3 = svgEl("text", {
-      x: lx + 10, y: ly + 40,
-      "font-family": "system-ui, sans-serif",
-      "font-size": "11", fill: PAL.DARK
-    }); t3.textContent = "query (drag)";
-    svg.appendChild(t3);
+    if (showLegend) {
+      const lx = W - 110, ly = 18;
+      svg.appendChild(svgEl("circle", { cx: lx, cy: ly, r: 5, fill: PAL.ACCENT }));
+      const t1 = svgEl("text", { x: lx + 10, y: ly + 4, "font-family": "system-ui, sans-serif", "font-size": "11", fill: PAL.MUTED });
+      t1.textContent = `majority (${majority.length})`; svg.appendChild(t1);
+      svg.appendChild(svgEl("circle", { cx: lx, cy: ly + 18, r: 6, fill: PAL.RED }));
+      const t2 = svgEl("text", { x: lx + 10, y: ly + 22, "font-family": "system-ui, sans-serif", "font-size": "11", fill: PAL.MUTED });
+      t2.textContent = `minority (${minority.length})`; svg.appendChild(t2);
+      svg.appendChild(svgEl("circle", { cx: lx, cy: ly + 36, r: 6.5, fill: PAL.NAVY }));
+      const t3 = svgEl("text", { x: lx + 10, y: ly + 40, "font-family": "system-ui, sans-serif", "font-size": "11", fill: PAL.MUTED });
+      t3.textContent = "query (drag)"; svg.appendChild(t3);
+    }
 
     return { svg, queryDot, sortedMaj, sortedMin };
   }
@@ -1260,39 +2668,31 @@
     const line = svgEl("line", {
       x1: a.x, y1: a.y, x2: b.x, y2: b.y,
       stroke: color, "stroke-width": width,
-      "stroke-linecap": "round",
-      class: "anim-line"
+      "stroke-linecap": "round", class: "anim-line"
     });
     svg.appendChild(line);
     if (label) {
       const mx = (a.x + b.x) / 2;
       const my = (a.y + b.y) / 2 + labelOffsetY;
       const rect = svgEl("rect", {
-        x: mx - 28, y: my - 11,
-        width: 56, height: 16,
-        fill: PAL.WHITE,
-        stroke: color,
-        "stroke-width": 1.2,
-        rx: 3
+        x: mx - 30, y: my - 11, width: 60, height: 16,
+        fill: "white", stroke: color, "stroke-width": 1.2, rx: 4
       });
       svg.appendChild(rect);
       const t = svgEl("text", {
         x: mx, y: my + 1,
         "font-family": "system-ui, sans-serif",
-        "font-size": "11",
-        "font-weight": "700",
-        fill: color,
-        "text-anchor": "middle",
-        "dominant-baseline": "middle"
+        "font-size": "11", "font-weight": "600",
+        fill: color, "text-anchor": "middle", "dominant-baseline": "middle"
       });
-      t.textContent = label;
-      svg.appendChild(t);
+      t.textContent = label; svg.appendChild(t);
     }
   }
 
-  // ─── Drag handler ─────────────────────────────────────────────────
+  // ═══ Drag ═════════════════════════════════════════════════════════
   function makeDraggable(svgId) {
     const svg = document.getElementById(svgId);
+    if (!svg) return;
     const queryDot = svg.querySelector(".query-dot");
     if (!queryDot) return;
     let dragging = false;
@@ -1303,7 +2703,6 @@
       const ctm = svg.getScreenCTM();
       if (!ctm) return null;
       const t = pt.matrixTransform(ctm.inverse());
-      // Clamp to plot area
       return {
         x: Math.max(20, Math.min(W - 20, t.x)),
         y: Math.max(20, Math.min(H - 20, t.y))
@@ -1322,82 +2721,74 @@
       if (p) setState({ query: p });
     });
     queryDot.addEventListener("pointerup", () => {
-      dragging = false;
-      queryDot.classList.remove("dragging");
+      dragging = false; queryDot.classList.remove("dragging");
     });
     queryDot.addEventListener("pointercancel", () => {
-      dragging = false;
-      queryDot.classList.remove("dragging");
+      dragging = false; queryDot.classList.remove("dragging");
     });
-    // Also allow click anywhere on SVG to move query
     svg.addEventListener("click", (e) => {
       if (e.target === queryDot) return;
-      const p = svgPoint(e);
-      if (p) setState({ query: p });
+      const p = svgPoint(e); if (p) setState({ query: p });
     });
   }
 
-  // ─── Section 1: Standard vs FairRank split view ───────────────────
-  function renderStandard() {
-    const { sortedMaj, sortedMin } = renderPlot("svg-standard", {
-      highlightMajIdx: [],
-      highlightMinIdx: [],
-      drawQuery: true,
-      showHint: true
+  // ═══ Section renderers ═══════════════════════════════════════════
+  function renderHero() {
+    const { sortedMaj, sortedMin } = renderPlot("svg-hero", {
+      drawQuery: false, showLegend: true
     });
+    const svg = document.getElementById("svg-hero");
+    if (!svg || sortedMaj.length === 0 || sortedMin.length === 0) return;
+    // Static dummy query in the middle for the hero illustration
+    const heroQuery = { x: 310, y: 180 };
+    drawLine(svg, heroQuery, sortedMaj[0], PAL.ACCENT, 3, "d₁ᵐᵃʲ", -12);
+    drawLine(svg, heroQuery, sortedMin[0], PAL.RED, 3, "d₁ᵐⁱⁿ", 18);
+    svg.appendChild(svgEl("circle", {
+      cx: heroQuery.x, cy: heroQuery.y, r: 9,
+      fill: PAL.NAVY, stroke: "white", "stroke-width": 2.5
+    }));
+  }
+
+  function renderStandard() {
+    const { sortedMaj, sortedMin } = renderPlot("svg-standard", { showHint: true });
     const svg = document.getElementById("svg-standard");
-    if (sortedMaj.length === 0 || sortedMin.length === 0) return;
-    drawLine(svg, state.query, sortedMaj[0], PAL.BLUE, 3, "d₁ᵐᵃʲ", -12);
+    if (!svg || sortedMaj.length === 0 || sortedMin.length === 0) return;
+    drawLine(svg, state.query, sortedMaj[0], PAL.ACCENT, 3, "d₁ᵐᵃʲ", -12);
     drawLine(svg, state.query, sortedMin[0], PAL.RED, 3, "d₁ᵐⁱⁿ", 18);
     makeDraggable("svg-standard");
-    // Prediction: closer of the two
     const pred = sortedMin[0].d < sortedMaj[0].d ? "minority" : "majority";
     const el = document.getElementById("pred-standard");
     el.textContent = pred;
-    el.className = "pred" + (pred === "minority" ? " minority" : "");
+    el.className = "pred " + pred;
   }
 
   function renderFair() {
     const keff = calcKeff(state.alpha, state.IR);
-    const { sortedMaj, sortedMin } = renderPlot("svg-fair", {
-      drawQuery: true
-    });
+    const { sortedMaj, sortedMin } = renderPlot("svg-fair", {});
     const svg = document.getElementById("svg-fair");
-    if (sortedMaj.length === 0 || sortedMin.length === 0) return;
+    if (!svg || sortedMaj.length === 0 || sortedMin.length === 0) return;
     const majIdx = Math.min(keff - 1, sortedMaj.length - 1);
-    drawLine(svg, state.query, sortedMaj[majIdx], PAL.BLUE, 3, `d_${keff}ᵐᵃʲ`, -12);
+    drawLine(svg, state.query, sortedMaj[majIdx], PAL.ACCENT, 3, `d_${keff}ᵐᵃʲ`, -12);
     drawLine(svg, state.query, sortedMin[0], PAL.RED, 3, "d₁ᵐⁱⁿ", 18);
     makeDraggable("svg-fair");
-    // Prediction: closer
     const pred = sortedMin[0].d < sortedMaj[majIdx].d ? "minority" : "majority";
     const el = document.getElementById("pred-fair");
     el.textContent = pred;
-    el.className = "pred" + (pred === "minority" ? " minority" : "");
+    el.className = "pred " + pred;
   }
 
-  // ─── Section 2: α controls k_eff ─────────────────────────────────
   function renderAlphaSection() {
     const keff = calcKeff(state.alpha, state.IR);
-    const { sortedMaj, sortedMin } = renderPlot("svg-alpha", {
-      highlightMajIdx: sortedMaj_safe_idx(),
-      highlightMinIdx: []
-    });
-    function sortedMaj_safe_idx() {
-      // Need sortedMaj available — placeholder; recompute below.
-      return [];
-    }
-    // Recompute with correct highlight
+    const probe = renderPlot("svg-alpha", { drawQuery: false, showLegend: false });
+    const sortedMaj = probe.sortedMaj, sortedMin = probe.sortedMin;
+    const hiMaj = sortedMaj.length ? [sortedMaj[Math.min(keff - 1, sortedMaj.length - 1)].origIdx] : [];
+    const hiMin = sortedMin.length ? [sortedMin[0].origIdx] : [];
+    renderPlot("svg-alpha", { highlightMajIdx: hiMaj, highlightMinIdx: hiMin });
     const svg = document.getElementById("svg-alpha");
-    clearSvg(svg);
-    const { sortedMaj: sm2, sortedMin: smin2 } = renderPlot("svg-alpha", {
-      highlightMajIdx: sortedMaj.length ? [sortedMaj[Math.min(keff - 1, sortedMaj.length - 1)].origIdx] : [],
-      highlightMinIdx: sortedMin.length ? [sortedMin[0].origIdx] : []
-    });
-
     if (sortedMaj.length === 0 || sortedMin.length === 0) return;
     const targetMaj = sortedMaj[Math.min(keff - 1, sortedMaj.length - 1)];
     const targetMin = sortedMin[0];
-    drawLine(svg, state.query, targetMaj, PAL.BLUE, 3, `d_${keff}ᵐᵃʲ`, -12);
+    drawLine(svg, state.query, targetMaj, PAL.ACCENT, 3, `d_${keff}ᵐᵃʲ`, -12);
     drawLine(svg, state.query, targetMin, PAL.RED, 3, "d₁ᵐⁱⁿ", 18);
     makeDraggable("svg-alpha");
 
@@ -1406,35 +2797,31 @@
     const closer = targetMin.d < targetMaj.d ? "minority" : "majority";
     const cEl = document.getElementById("closer-val");
     cEl.textContent = closer;
-    cEl.style.color = closer === "minority" ? PAL.RED : PAL.BLUE;
+    cEl.style.color = closer === "minority" ? PAL.RED : PAL.ACCENT;
 
     document.getElementById("alpha-r-current").textContent = state.IR;
     document.getElementById("keff-1").textContent = state.IR;
     document.getElementById("keff-half").textContent = calcKeff(0.5, state.IR);
 
-    // Render formula with KaTeX (HTML fallback below)
     renderMath("formula-keff",
       `k_{\\text{eff}} = \\text{round}(r^{\\alpha}) = \\text{round}(${state.IR}^{${state.alpha.toFixed(2)}}) = \\mathbf{${keff}}`,
       `k<sub>eff</sub> = round(r<sup>α</sup>) = round(${state.IR}<sup>${state.alpha.toFixed(2)}</sup>) = <strong>${keff}</strong>`
     );
   }
 
-  // ─── Section 3: multi-vote ───────────────────────────────────────
   function renderVoteSection() {
     const keff = calcKeff(state.alpha, state.IR);
     const nv = state.n_votes;
     const svg = document.getElementById("svg-vote");
+    if (!svg) return;
     clearSvg(svg);
 
-    // Compute pairs first
     const sortedMajAll = majority.map((p, i) => ({ ...p, d: dist(p, state.query), origIdx: i }))
                                   .sort((a, b) => a.d - b.d);
     const sortedMinAll = minority.map((p, i) => ({ ...p, d: dist(p, state.query), origIdx: i }))
                                   .sort((a, b) => a.d - b.d);
 
-    const minIdxs = [];
-    const majIdxs = [];
-    const pairs = [];
+    const minIdxs = [], majIdxs = [], pairs = [];
     for (let i = 1; i <= nv; i++) {
       const minIdx = i - 1;
       const majRank = i * keff;
@@ -1442,47 +2829,36 @@
       if (minIdx >= sortedMinAll.length) break;
       minIdxs.push(sortedMinAll[minIdx].origIdx);
       majIdxs.push(sortedMajAll[majIdx].origIdx);
-      const m = sortedMinAll[minIdx];
-      const M = sortedMajAll[majIdx];
+      const m = sortedMinAll[minIdx]; const M = sortedMajAll[majIdx];
       pairs.push({
-        i, keff, majRank,
-        m, M,
-        minWins: m.d < M.d,
-        d_min: m.d, d_maj: M.d
+        i, keff, majRank, m, M,
+        minWins: m.d < M.d, d_min: m.d, d_maj: M.d
       });
     }
 
-    // Re-render with highlights (we already cleared so use renderPlot)
-    const { } = renderPlot("svg-vote", {
-      highlightMajIdx: majIdxs,
-      highlightMinIdx: minIdxs
+    renderPlot("svg-vote", {
+      highlightMajIdx: majIdxs, highlightMinIdx: minIdxs
     });
 
-    // Draw vote lines (rendered after re-init)
     pairs.forEach((p, idx) => {
-      const baseOpacity = 0.45 + 0.55 * (1 - idx / nv);
+      const baseOpacity = 0.42 + 0.55 * (1 - idx / nv);
       const isHi = state.highlightVoteIdx === p.i;
       const opacity = isHi ? 1.0 : baseOpacity;
-      const width  = isHi ? 3.5 : 1.5;
+      const width = isHi ? 3.5 : 1.5;
       const minLine = svgEl("line", {
-        x1: state.query.x, y1: state.query.y,
-        x2: p.m.x, y2: p.m.y,
-        stroke: PAL.RED, "stroke-width": width,
-        "stroke-opacity": opacity
+        x1: state.query.x, y1: state.query.y, x2: p.m.x, y2: p.m.y,
+        stroke: PAL.RED, "stroke-width": width, "stroke-opacity": opacity
       });
       svg.appendChild(minLine);
       const majLine = svgEl("line", {
-        x1: state.query.x, y1: state.query.y,
-        x2: p.M.x, y2: p.M.y,
-        stroke: PAL.BLUE, "stroke-width": width,
-        "stroke-opacity": opacity
+        x1: state.query.x, y1: state.query.y, x2: p.M.x, y2: p.M.y,
+        stroke: PAL.ACCENT, "stroke-width": width, "stroke-opacity": opacity
       });
       svg.appendChild(majLine);
     });
 
     makeDraggable("svg-vote");
 
-    // Render tally
     const tallyDiv = document.getElementById("vote-tally");
     tallyDiv.innerHTML = "";
     let minorityWins = 0;
@@ -1496,24 +2872,17 @@
         <span class="winner ${v.minWins ? "min" : "maj"}">${v.minWins ? "minority" : "majority"}</span>
         <span class="strength">${v.d_min.toFixed(0)} vs ${v.d_maj.toFixed(0)}</span>
       `;
-      row.addEventListener("mouseenter", () => {
-        state.highlightVoteIdx = v.i;
-        renderVoteSection();
-      });
-      row.addEventListener("mouseleave", () => {
-        state.highlightVoteIdx = null;
-        renderVoteSection();
-      });
+      row.addEventListener("mouseenter", () => { state.highlightVoteIdx = v.i; renderVoteSection(); });
+      row.addEventListener("mouseleave", () => { state.highlightVoteIdx = null; renderVoteSection(); });
       tallyDiv.appendChild(row);
     });
 
-    // Decision with flip animation
     const fraction = pairs.length === 0 ? 0 : minorityWins / pairs.length;
     const decision = fraction > 0.5 ? "minority" : "majority";
     const decisionDiv = document.getElementById("vote-decision");
-    const previousDecision = decisionDiv.dataset.decision;
-    decisionDiv.className = "decision " + decision;
-    if (previousDecision && previousDecision !== decision) {
+    const previous = decisionDiv.dataset.decision;
+    decisionDiv.className = "vote-decision " + decision;
+    if (previous && previous !== decision) {
       decisionDiv.classList.add("flipped");
       setTimeout(() => decisionDiv.classList.remove("flipped"), 700);
     }
@@ -1522,11 +2891,9 @@
       `${minorityWins}/${pairs.length} = ${(fraction * 100).toFixed(0)}%  →  ${decision}`;
   }
 
-  // ─── Section 4: Inner CV grid with fold animation ─────────────────
+  // ═══ Section 4 — Inner CV grid ════════════════════════════════════
   const ALPHAS = [0.25, 0.5, 0.75, 1.0];
   const NVOTES = [1, 2, 3, 5, 7, 10];
-  // Realistic-looking score grid (peak around α=0.75, n=5)
-  // (Modelled after typical patterns from the project's inner CV runs.)
   function realisticScore(alpha, nv) {
     const dAlpha = alpha - 0.78;
     const dNv = (Math.log2(nv) - Math.log2(5)) / Math.log2(10);
@@ -1537,6 +2904,7 @@
 
   function buildCVGrid() {
     const grid = document.getElementById("cv-grid");
+    if (!grid) return;
     grid.innerHTML = "";
     const corner = document.createElement("div");
     corner.className = "cv-cell header";
@@ -1572,7 +2940,6 @@
   buildCVGrid();
 
   let cvRunning = false;
-
   async function runInnerCV() {
     if (cvRunning) return;
     cvRunning = true;
@@ -1582,63 +2949,48 @@
       c.querySelector(".score-text").textContent = "";
       c.querySelectorAll(".fold-dot").forEach(d => d.classList.remove("done"));
     });
-
-    document.getElementById("cv-result").textContent = "Evaluating folds…";
+    document.getElementById("cv-result").innerHTML = "Evaluating folds…";
     document.getElementById("alpha-star").textContent = "—";
     document.getElementById("nv-star").textContent = "—";
     document.getElementById("gmean-star").textContent = "—";
 
-    // Show fold viz panel
     const foldViz = document.getElementById("fold-viz");
     const foldBar = document.getElementById("fold-bar");
     const foldLabel = document.getElementById("fold-current-label");
     foldViz.style.display = "block";
-    foldBar.innerHTML =
-      '<div class="fold-segment train">train</div>' +
-      '<div class="fold-segment train">train</div>' +
-      '<div class="fold-segment val">val</div>';
+    foldBar.innerHTML = '<div class="fold-segment train">train</div><div class="fold-segment train">train</div><div class="fold-segment val">val</div>';
 
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-    let bestScore = -Infinity;
-    let bestCell = null;
+    let bestScore = -Infinity, bestCell = null;
 
     for (let i = 0; i < cells.length; i++) {
       const cell = cells[i];
       cell.classList.add("evaluating");
-      foldLabel.textContent = `Cell (α=${cell.dataset.alpha}, n=${cell.dataset.nv})  ·  fold 1 of 3`;
-      // Animate 3 folds: rotate which segment is "val"
       const segs = foldBar.querySelectorAll(".fold-segment");
       const foldDots = cell.querySelectorAll(".fold-dot");
       for (let f = 0; f < 3; f++) {
-        // Rotate val to position f
         segs.forEach((s, idx) => {
           s.className = "fold-segment " + (idx === f ? "val" : "train");
           s.textContent = idx === f ? "val" : "train";
         });
-        foldLabel.textContent =
-          `Cell (α=${cell.dataset.alpha}, n=${cell.dataset.nv})  ·  fold ${f + 1} of 3`;
-        await sleep(60);
+        foldLabel.textContent = `(α=${cell.dataset.alpha}, n=${cell.dataset.nv})  ·  fold ${f + 1} of 3`;
+        await sleep(55);
         foldDots[f].classList.add("done");
-        await sleep(40);
+        await sleep(35);
       }
       const score = parseFloat(cell.dataset.score);
-      cell.classList.remove("evaluating");
-      cell.classList.add("filled");
+      cell.classList.remove("evaluating"); cell.classList.add("filled");
       cell.querySelector(".score-text").textContent = score.toFixed(3);
       if (score > bestScore) { bestScore = score; bestCell = cell; }
     }
-
-    // Final: highlight best
     if (bestCell) {
       bestCell.classList.add("best");
-      const a = bestCell.dataset.alpha;
-      const n = bestCell.dataset.nv;
-      const s = bestCell.dataset.score;
+      const a = bestCell.dataset.alpha, n = bestCell.dataset.nv, s = bestCell.dataset.score;
       document.getElementById("alpha-star").textContent = a;
       document.getElementById("nv-star").textContent = n;
       document.getElementById("gmean-star").textContent = s;
-      document.getElementById("cv-result").textContent =
-        `Best  (α*, n_votes*) = (${a}, ${n})  with G-Mean = ${s}`;
+      document.getElementById("cv-result").innerHTML =
+        `Best  <strong>(α*, n_votes*) = (${a}, ${n})</strong>  with G-Mean = <strong>${s}</strong>`;
     }
     foldLabel.textContent = `Complete — all 24 cells × 3 folds evaluated`;
     cvRunning = false;
@@ -1652,17 +3004,14 @@
       c.querySelector(".score-text").textContent = "";
       c.querySelectorAll(".fold-dot").forEach(d => d.classList.remove("done"));
     });
-    document.getElementById("cv-result").textContent = "Awaiting search…";
+    document.getElementById("cv-result").innerHTML = "Click <strong>Run inner CV</strong> to evaluate 24 cells × 3 folds.";
     document.getElementById("alpha-star").textContent = "—";
     document.getElementById("nv-star").textContent = "—";
     document.getElementById("gmean-star").textContent = "—";
     document.getElementById("fold-viz").style.display = "none";
   }
 
-  // ─── Math rendering (KaTeX + HTML/Unicode fallback) ─────────────────
-  // If KaTeX is available, use it for proper LaTeX rendering.
-  // Otherwise, fall back to inline HTML with Unicode super/subscripts,
-  // so the page still looks decent fully offline.
+  // ═══ Math rendering (KaTeX + Unicode fallback) ═══════════════════
   function renderMath(elementId, latex, htmlFallback) {
     const el = document.getElementById(elementId);
     if (!el) return;
@@ -1675,7 +3024,7 @@
     el.innerHTML = htmlFallback;
   }
 
-  // ─── Master render — called on every state change ─────────────────
+  // ═══ Master render ═══════════════════════════════════════════════
   let renderScheduled = false;
   function scheduleRender() {
     if (renderScheduled) return;
@@ -1685,31 +3034,26 @@
       renderAll();
     });
   }
-
   function renderAll() {
+    renderHero();
     renderStandard();
     renderFair();
     renderAlphaSection();
     renderVoteSection();
-    // Sync slider displays
     document.getElementById("ir-val").textContent = state.IR;
     document.getElementById("alpha1-val").textContent = state.alpha.toFixed(2);
     document.getElementById("alpha2-val").textContent = state.alpha.toFixed(2);
     document.getElementById("alpha3-val").textContent = state.alpha.toFixed(2);
     document.getElementById("nv-val").textContent = state.n_votes;
-    // Save to URL hash (throttled internally by browser)
     saveToHash();
   }
-
   function setState(patch) {
     Object.assign(state, patch);
-    if (patch.IR !== undefined) {
-      regenerateMinority();
-    }
+    if (patch.IR !== undefined) regenerateMinority();
     scheduleRender();
   }
 
-  // ─── URL state (location.hash) ────────────────────────────────────
+  // ═══ URL hash state ══════════════════════════════════════════════
   function saveToHash() {
     const params = new URLSearchParams();
     params.set("a", state.alpha.toFixed(2));
@@ -1722,200 +3066,184 @@
   function loadFromHash() {
     if (!location.hash) return;
     try {
-      const params = new URLSearchParams(location.hash.substring(1));
-      if (params.has("a"))  state.alpha = parseFloat(params.get("a"));
-      if (params.has("n"))  state.n_votes = parseInt(params.get("n"), 10);
-      if (params.has("ir")) state.IR = parseInt(params.get("ir"), 10);
-      if (params.has("qx") && params.has("qy"))
-        state.query = { x: parseFloat(params.get("qx")), y: parseFloat(params.get("qy")) };
+      const p = new URLSearchParams(location.hash.substring(1));
+      if (p.has("a")) state.alpha = parseFloat(p.get("a"));
+      if (p.has("n")) state.n_votes = parseInt(p.get("n"), 10);
+      if (p.has("ir")) state.IR = parseInt(p.get("ir"), 10);
+      if (p.has("qx") && p.has("qy"))
+        state.query = { x: parseFloat(p.get("qx")), y: parseFloat(p.get("qy")) };
       regenerateMinority();
-    } catch (e) { /* ignore malformed hash */ }
+    } catch (e) { /* ignore */ }
   }
   loadFromHash();
 
-  // ─── Top-level slider wiring ───────────────────────────────────────
+  // ═══ Slider wiring ═══════════════════════════════════════════════
   document.getElementById("ir-slider").addEventListener("input", (e) => {
     setState({ IR: parseInt(e.target.value, 10) });
   });
-  function bindAlphaSliders() {
-    const sliders = [
-      ["alpha1-slider", "alpha1-val"],
-      ["alpha2-slider", "alpha2-val"],
-      ["alpha3-slider", "alpha3-val"]
-    ];
-    sliders.forEach(([sId, vId]) => {
-      const el = document.getElementById(sId);
-      el.addEventListener("input", (e) => {
-        const a = parseInt(e.target.value, 10) / 100;
-        // sync all three sliders
-        sliders.forEach(([s2]) => {
-          if (s2 !== sId) document.getElementById(s2).value = e.target.value;
-        });
-        setState({ alpha: a });
+  const alphaSliders = ["alpha1-slider", "alpha2-slider", "alpha3-slider"];
+  alphaSliders.forEach(sId => {
+    document.getElementById(sId).addEventListener("input", (e) => {
+      const a = parseInt(e.target.value, 10) / 100;
+      alphaSliders.forEach(s2 => {
+        if (s2 !== sId) document.getElementById(s2).value = e.target.value;
       });
+      setState({ alpha: a });
     });
-  }
-  bindAlphaSliders();
+  });
   document.getElementById("nv-slider").addEventListener("input", (e) => {
     setState({ n_votes: parseInt(e.target.value, 10) });
   });
-
   document.getElementById("cv-run").addEventListener("click", runInnerCV);
   document.getElementById("cv-reset").addEventListener("click", resetInnerCV);
 
-  // ─── Presets ───────────────────────────────────────────────────────
-  document.querySelectorAll(".preset").forEach(btn => {
+  // ═══ Presets ═════════════════════════════════════════════════════
+  document.querySelectorAll(".chip[data-preset]").forEach(btn => {
     btn.addEventListener("click", () => {
       const name = btn.dataset.preset;
       const p = PRESETS[name];
       if (!p) return;
-      document.querySelectorAll(".preset").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".chip[data-preset]").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
       Object.assign(state, p);
       regenerateMinority();
-      // sync sliders' DOM values
       document.getElementById("ir-slider").value = state.IR;
       scheduleRender();
     });
   });
-
   document.getElementById("btn-reset").addEventListener("click", () => {
     Object.assign(state, {
-      query: { x: 310, y: 180 },
-      alpha: 0.75,
-      n_votes: 5,
-      IR: 8,
-      minoritySigma: 35,
-      minorityCx: 420
+      query: { x: 310, y: 180 }, alpha: 0.75, n_votes: 5, IR: 8,
+      minoritySigma: 35, minorityCx: 420
     });
     regenerateMinority();
     document.getElementById("ir-slider").value = 8;
-    document.getElementById("alpha1-slider").value = 75;
-    document.getElementById("alpha2-slider").value = 75;
-    document.getElementById("alpha3-slider").value = 75;
+    alphaSliders.forEach(s => { document.getElementById(s).value = 75; });
     document.getElementById("nv-slider").value = 5;
-    document.querySelectorAll(".preset").forEach(b => b.classList.remove("active"));
-    document.querySelector('.preset[data-preset="standard"]').classList.add("active");
+    document.querySelectorAll(".chip[data-preset]").forEach(b => b.classList.remove("active"));
+    document.querySelector('.chip[data-preset="standard"]').classList.add("active");
     history.replaceState(null, "", location.pathname);
     scheduleRender();
   });
 
-  // ─── Guided tour ───────────────────────────────────────────────────
+  // ═══ Guided tour ═════════════════════════════════════════════════
   let tourActive = false;
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
+  function focusSection(secId, text) {
+    document.getElementById("tour-msg").textContent = text;
+    document.querySelectorAll("section").forEach(s => s.classList.remove("focus"));
+    const sec = document.getElementById(secId);
+    if (sec) { sec.classList.add("focus"); sec.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  }
   async function playTour() {
     if (tourActive) return;
     tourActive = true;
     document.body.classList.add("touring");
-    const banner = document.getElementById("tour-banner");
-    const msg = document.getElementById("tour-msg");
 
-    function focus(secId, text) {
-      msg.textContent = text;
-      document.querySelectorAll("section").forEach(s => s.classList.remove("focus"));
-      const sec = document.getElementById(secId);
-      if (sec) {
-        sec.classList.add("focus");
-        sec.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    }
+    focusSection("demo", "1 / 4  ·  Drag the query — see when the two classifiers disagree");
+    await sleep(1600); if (!tourActive) return endTour();
+    for (let xq = 280; xq <= 400; xq += 5) { if (!tourActive) return endTour(); setState({ query: { x: xq, y: 180 } }); await sleep(45); }
+    for (let xq = 400; xq >= 280; xq -= 5) { if (!tourActive) return endTour(); setState({ query: { x: xq, y: 180 } }); await sleep(45); }
 
-    // STAGE 1 — split view, drag query across
-    focus("section-1", "1 / 4  ·  Watch how Standard KNN and FairRank diverge as the query moves");
-    await sleep(1800);
-    if (!tourActive) return endTour();
-    // Animate query position
-    for (let xq = 280; xq <= 400; xq += 5) {
-      if (!tourActive) return endTour();
-      setState({ query: { x: xq, y: 180 } });
-      await sleep(50);
-    }
-    for (let xq = 400; xq >= 280; xq -= 5) {
-      if (!tourActive) return endTour();
-      setState({ query: { x: xq, y: 180 } });
-      await sleep(50);
-    }
-
-    // STAGE 2 — alpha sweep
-    focus("section-2", "2 / 4  ·  Sweep α from 0 to 1 — see k_eff grow from 1 to r");
+    focusSection("correction", "2 / 4  ·  Sweep α from 0 to 1 — watch k_eff grow");
     await sleep(1400);
     for (let a = 0; a <= 100; a += 4) {
       if (!tourActive) return endTour();
       document.getElementById("alpha2-slider").value = a;
       document.getElementById("alpha2-slider").dispatchEvent(new Event("input"));
-      await sleep(60);
+      await sleep(55);
     }
     await sleep(400);
 
-    // STAGE 3 — multi-vote
-    focus("section-3", "3 / 4  ·  Increase n_votes from 1 to 10");
-    await sleep(1400);
+    focusSection("vote", "3 / 4  ·  Stack n_votes from 1 to 10");
+    await sleep(1200);
     for (let nv = 1; nv <= 10; nv++) {
       if (!tourActive) return endTour();
       document.getElementById("nv-slider").value = nv;
       document.getElementById("nv-slider").dispatchEvent(new Event("input"));
-      await sleep(280);
+      await sleep(260);
     }
     await sleep(400);
 
-    // STAGE 4 — inner CV
-    focus("section-4", "4 / 4  ·  Inner CV picks (α*, n_votes*) automatically");
-    await sleep(1200);
+    focusSection("search", "4 / 4  ·  Inner CV picks (α*, n_votes*) automatically");
+    await sleep(1100);
     runInnerCV();
-    // Wait for CV to complete (cells * folds * ~100ms)
-    while (cvRunning) {
-      if (!tourActive) return endTour();
-      await sleep(200);
-    }
+    while (cvRunning) { if (!tourActive) return endTour(); await sleep(200); }
     await sleep(1500);
     endTour();
   }
-
   function endTour() {
     tourActive = false;
     document.body.classList.remove("touring");
     document.querySelectorAll("section").forEach(s => s.classList.remove("focus"));
   }
-
   document.getElementById("btn-tour").addEventListener("click", playTour);
   document.getElementById("tour-stop").addEventListener("click", endTour);
 
-  // ─── Auto-render section-title formulas (re-run when CDN loads) ────
-  function renderAllKatex() {
+  // ═══ KaTeX once CDN loads (deferred script) ══════════════════════
+  function renderAllMath() {
     renderMath("math-keff",
       "k_{\\text{eff}} = \\text{round}(r^{\\alpha})",
       'k<sub>eff</sub> = round(r<sup>α</sup>)');
-    renderMath("math-multivote",
-      "\\text{vote}_i \\;=\\; [\\, d_i^{\\min} < d_{i\\cdot k_{\\text{eff}}}^{\\max}\\,]",
-      'vote<sub>i</sub> = [&thinsp;d<sub>i</sub><sup>min</sup> &lt; d<sub>i·k<sub>eff</sub></sub><sup>maj</sup>&thinsp;]');
-    // Re-render the live formula (depends on current state)
     renderAlphaSection();
   }
   if (document.readyState === "complete" || document.readyState === "interactive") {
-    setTimeout(renderAllKatex, 80);
+    setTimeout(renderAllMath, 80);
   } else {
-    window.addEventListener("DOMContentLoaded", () => setTimeout(renderAllKatex, 80));
+    window.addEventListener("DOMContentLoaded", () => setTimeout(renderAllMath, 80));
   }
-  // Re-render KaTeX after CDN script loads (script is `defer`-ed)
-  window.addEventListener("load", renderAllKatex);
+  window.addEventListener("load", renderAllMath);
 
-  // ─── Init slider DOM values from state ─────────────────────────────
+  // ═══ Scroll reveal animations ════════════════════════════════════
+  const revealEls = document.querySelectorAll(".reveal");
+  if ("IntersectionObserver" in window) {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("visible");
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: "0px 0px -40px 0px" });
+    revealEls.forEach(el => observer.observe(el));
+  } else {
+    revealEls.forEach(el => el.classList.add("visible"));
+  }
+
+  // ═══ Floating back-to-top button (appears after 600px scroll) ════
+  const backToTop = document.getElementById("back-to-top");
+  if (backToTop) {
+    const checkScroll = () => {
+      if (window.scrollY > 600) backToTop.classList.add("visible");
+      else backToTop.classList.remove("visible");
+    };
+    window.addEventListener("scroll", checkScroll, { passive: true });
+    backToTop.addEventListener("click", () => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+    checkScroll();
+  }
+
+  // ═══ Subtle nav shadow when scrolled ═════════════════════════════
+  const topnav = document.querySelector(".topnav");
+  if (topnav) {
+    const updateNav = () => {
+      if (window.scrollY > 12) topnav.classList.add("scrolled");
+      else topnav.classList.remove("scrolled");
+    };
+    window.addEventListener("scroll", updateNav, { passive: true });
+    updateNav();
+  }
+
+  // ═══ Init slider DOM values ══════════════════════════════════════
   document.getElementById("ir-slider").value = state.IR;
-  document.getElementById("alpha1-slider").value = Math.round(state.alpha * 100);
-  document.getElementById("alpha2-slider").value = Math.round(state.alpha * 100);
-  document.getElementById("alpha3-slider").value = Math.round(state.alpha * 100);
+  alphaSliders.forEach(s => { document.getElementById(s).value = Math.round(state.alpha * 100); });
   document.getElementById("nv-slider").value = state.n_votes;
 
-  // First paint
   scheduleRender();
-
-  // Make sure all draggable plots are wired (after initial render)
   setTimeout(() => {
-    makeDraggable("svg-standard");
-    makeDraggable("svg-fair");
-    makeDraggable("svg-alpha");
-    makeDraggable("svg-vote");
+    makeDraggable("svg-standard"); makeDraggable("svg-fair");
+    makeDraggable("svg-alpha"); makeDraggable("svg-vote");
   }, 200);
 
 })();
